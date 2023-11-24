@@ -20,6 +20,14 @@ int main()
   HAL_GPIO_Init(LED_PORT, &gpio_init);
   HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_RESET);
 
+  // SWD (PA13, PA14)
+  gpio_init.Pin = GPIO_PIN_13 | GPIO_PIN_14;
+  gpio_init.Mode = GPIO_MODE_AF_PP; // Pass over control to AF peripheral
+  gpio_init.Alternate = GPIO_AF0_SWJ;
+  gpio_init.Pull = GPIO_PULLUP;
+  gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(GPIOA, &gpio_init);
+
   // Clocks
   RCC_OscInitTypeDef osc_init = { 0 };
   osc_init.OscillatorType = RCC_OSCILLATORTYPE_HSI;
