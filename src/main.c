@@ -1,9 +1,43 @@
 #include <stm32g0xx_hal.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #define LED_PORT    GPIOA
 #define LED_PIN_ACT GPIO_PIN_4
+
+static uint8_t swv_buf[256];
+static size_t swv_buf_ptr = 0;
+__attribute__ ((noinline, used))
+void swv_trap_line()
+{
+  *(volatile char *)swv_buf;
+}
+static inline void swv_putchar(uint8_t c)
+{
+  // ITM_SendChar(c);
+  if (c == '\n') {
+    swv_buf[swv_buf_ptr >= sizeof swv_buf ?
+      (sizeof swv_buf - 1) : swv_buf_ptr] = '\0';
+    swv_trap_line();
+    swv_buf_ptr = 0;
+  } else if (++swv_buf_ptr <= sizeof swv_buf) {
+    swv_buf[swv_buf_ptr - 1] = c;
+  }
+}
+static void swv_printf(const char *restrict fmt, ...)
+{
+  char s[256];
+  va_list args;
+  va_start(args, fmt);
+  int r = vsnprintf(s, sizeof s, fmt, args);
+  for (int i = 0; i < r && i < sizeof s - 1; i++) swv_putchar(s[i]);
+  if (r >= sizeof s) {
+    for (int i = 0; i < 3; i++) swv_putchar('.');
+    swv_putchar('\n');
+  }
+}
 
 int main()
 {
@@ -46,6 +80,29 @@ int main()
   HAL_RCC_ClockConfig(&clk_init, FLASH_LATENCY_2);
 
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
+
+  // ======== SPIx ADC ========
+  // ADC_CK
+  gpio_init.Pin = GPIO_PIN_11;
+  gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
+  gpio_init.Pull = GPIO_NOPULL;
+  gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(GPIOA, &gpio_init);
+  // ADC_DA
+  gpio_init.Pin = GPIO_PIN_12;
+  gpio_init.Mode = GPIO_MODE_INPUT;
+  gpio_init.Pull = GPIO_NOPULL;
+  gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(GPIOA, &gpio_init);
+
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_SET);
+  HAL_Delay(100);
+  // Pull down clock / chip select signal and wait for DRDY
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_RESET);
+  uint32_t start = HAL_GetTick();
+  while (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_12) == GPIO_PIN_SET) { }
+  swv_printf("Set-up = %u ms\n", HAL_GetTick() - start);  // 280 ms
+  swv_printf("Clock = %u Hz\n", HAL_RCC_GetHCLKFreq());   // 16 MHz
 
   while (true) {
     HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_RESET);
