@@ -43,6 +43,10 @@ static void swv_printf(const char *restrict fmt, ...)
 #define PIN_ADC_DA  GPIO_PIN_12
 void adc_configure();
 
+SPI_HandleTypeDef spi1 = { 0 };
+#define PIN_nRF_CS  GPIO_PIN_0
+#define PIN_nRF_CE  GPIO_PIN_3
+
 int main()
 {
   HAL_Init();
@@ -112,6 +116,55 @@ int main()
 
   // Pull down clock / chip select signal and wait for DRDY
   HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_RESET);
+
+  // ======== SPI ========
+  // GPIO ports
+  // SPI1_SCK (PA1), SPI1_MOSI (PA2), SPI1_MISO (PA6)
+  gpio_init.Pin = GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_6;
+  gpio_init.Mode = GPIO_MODE_AF_PP;
+  gpio_init.Alternate = GPIO_AF0_SPI1;
+  gpio_init.Pull = GPIO_NOPULL;
+  gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(GPIOA, &gpio_init);
+  // nRF24L01+ CSN (PA0)
+  gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
+  gpio_init.Pin = PIN_nRF_CS | PIN_nRF_CE;
+  HAL_GPIO_Init(GPIOA, &gpio_init);
+  HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_RESET);
+
+  __HAL_RCC_SPI1_CLK_ENABLE();
+  spi1.Instance = SPI1;
+  spi1.Init.Mode = SPI_MODE_MASTER;
+  spi1.Init.Direction = SPI_DIRECTION_2LINES;
+  spi1.Init.CLKPolarity = SPI_POLARITY_LOW; // CPOL = 0
+  spi1.Init.CLKPhase = SPI_PHASE_1EDGE;     // CPHA = 0
+  spi1.Init.NSS = SPI_NSS_SOFT;
+  spi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  spi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  spi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  spi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  spi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  HAL_SPI_Init(&spi1);
+  __HAL_SPI_ENABLE(&spi1);
+
+  // Read register 0x06 (RF_SETUP)
+/*
+  HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_RESET);
+  uint8_t cmd = 0x06;
+  HAL_SPI_Transmit(&spi1, &cmd, 1, 1000);
+  uint8_t data[1];
+  HAL_SPI_Receive(&spi1, data, 1, 1000);
+  HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_SET);
+  swv_printf("received data = %02x\n", data[0]);
+*/
+  HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_RESET);
+  uint8_t spi_tx[2] = {0x06, 0x00};
+  uint8_t spi_rx[2];
+  HAL_SPI_TransmitReceive(&spi1, spi_tx, spi_rx, 2, 1000);
+  HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_SET);
+  swv_printf("received data = %02x %02x\n", spi_rx[0], spi_rx[1]);
+  // 0e 0f
 
   while (true) {
     HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_RESET);
