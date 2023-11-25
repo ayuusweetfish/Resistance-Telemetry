@@ -41,6 +41,7 @@ static void swv_printf(const char *restrict fmt, ...)
 
 #define PIN_ADC_CK  GPIO_PIN_11
 #define PIN_ADC_DA  GPIO_PIN_12
+void adc_configure();
 
 int main()
 {
@@ -93,18 +94,22 @@ int main()
   gpio_init.Pull = GPIO_NOPULL;
   gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &gpio_init);
-  // ADC_CK
+  // ADC_DA
   gpio_init.Pin = PIN_ADC_DA;
-  gpio_init.Mode = GPIO_MODE_IT_FALLING;
+  gpio_init.Mode = GPIO_MODE_INPUT;
   gpio_init.Pull = GPIO_NOPULL;
   gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &gpio_init);
+
+  HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_RESET);
+  HAL_Delay(1);
+  while (HAL_GPIO_ReadPin(GPIOA, PIN_ADC_DA) == GPIO_PIN_SET) { }
+  adc_configure();
 
   // PA12 - EXIT line 12
   HAL_NVIC_SetPriority(EXTI4_15_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
 
-  HAL_Delay(100);
   // Pull down clock / chip select signal and wait for DRDY
   HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_RESET);
 
@@ -126,6 +131,41 @@ static inline void adc_ser_delay()
 {
   // >= 0.5 us
   for (volatile int i = 0; i < 16; i++) asm volatile ("nop");
+}
+
+inline void adc_configure()
+{
+  GPIO_InitTypeDef gpio_init;
+  gpio_init.Pin = PIN_ADC_DA;
+  gpio_init.Pull = GPIO_NOPULL;
+  gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
+
+  HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_RESET);
+  adc_ser_delay();
+  for (int i = 0; i < 29; i++) {
+    HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_SET);
+    adc_ser_delay();
+    HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_RESET);
+    adc_ser_delay();
+  }
+
+  gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
+  HAL_GPIO_Init(GPIOA, &gpio_init);
+  uint8_t writes[2] = {0x65 << 1, 0b00010100};
+  for (int i = 0; i < 16; i++) {
+    HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOA, PIN_ADC_DA, (writes[i / 8] >> (7 - i % 8)) & 1);
+    adc_ser_delay();
+    HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_RESET);
+    adc_ser_delay();
+  }
+
+  gpio_init.Mode = GPIO_MODE_IT_FALLING;
+  HAL_GPIO_Init(GPIOA, &gpio_init);
+  HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_SET);
+  adc_ser_delay();
+  HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_RESET);
+  adc_ser_delay();
 }
 
 static inline uint32_t adc_read()
