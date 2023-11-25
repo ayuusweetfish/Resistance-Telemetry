@@ -39,6 +39,9 @@ static void swv_printf(const char *restrict fmt, ...)
   }
 }
 
+#define PIN_ADC_CK  GPIO_PIN_11
+#define PIN_ADC_DA  GPIO_PIN_12
+
 int main()
 {
   HAL_Init();
@@ -81,34 +84,29 @@ int main()
 
   HAL_NVIC_SetPriority(SysTick_IRQn, 0, 0);
 
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_SET);
 
   // ======== SPIx ADC ========
   // ADC_CK
-  gpio_init.Pin = GPIO_PIN_11;
+  gpio_init.Pin = PIN_ADC_CK;
   gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
   gpio_init.Pull = GPIO_NOPULL;
   gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &gpio_init);
-  // ADC_DA
-  gpio_init.Pin = GPIO_PIN_12;
+  // ADC_CK
+  gpio_init.Pin = PIN_ADC_DA;
   gpio_init.Mode = GPIO_MODE_IT_FALLING;
   gpio_init.Pull = GPIO_NOPULL;
   gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &gpio_init);
 
+  // PA12 - EXIT line 12
   HAL_NVIC_SetPriority(EXTI4_15_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
 
   HAL_Delay(100);
   // Pull down clock / chip select signal and wait for DRDY
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_RESET);
-/*
-  uint32_t start = HAL_GetTick();
-  while (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_12) == GPIO_PIN_SET) { }
-  swv_printf("Set-up = %u ms\n", HAL_GetTick() - start);  // 280 ms
-  swv_printf("Clock = %u Hz\n", HAL_RCC_GetHCLKFreq());   // 16 MHz
-*/
+  HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_RESET);
 
   while (true) {
     HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_RESET);
@@ -124,18 +122,37 @@ void SysTick_Handler()
   HAL_SYSTICK_IRQHandler();
 }
 
+static inline void adc_ser_delay()
+{
+  // >= 0.5 us
+  for (volatile int i = 0; i < 16; i++) asm volatile ("nop");
+}
+
+static inline uint32_t adc_read()
+{
+  uint32_t value = 0;
+  for (int i = 0; i < 24; i++) {
+    HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_SET);
+    adc_ser_delay();
+    uint32_t bit = HAL_GPIO_ReadPin(GPIOA, PIN_ADC_DA);
+    value = (value << 1) | bit;
+    HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_RESET);
+    adc_ser_delay();
+  }
+  return value;
+}
+
 void EXTI4_15_IRQHandler()
 {
-  __HAL_GPIO_EXTI_CLEAR_FALLING_IT(GPIO_PIN_12);
-
   static uint32_t ticks[20];
   static int ticks_count = 0;
   if (ticks_count < 20) {
+    ticks[ticks_count++] = adc_read();
     ticks[ticks_count++] = HAL_GetTick();
     if (ticks_count == 20)
-      // 100 ms (initial delay in program) + 300 (initial set-up) + 100 * i (10 Hz)
       for (int i = 0; i < 20; i++) {
-        swv_printf("tick = %u\n", ticks[i]);
+        swv_printf("[%02d] = %06x\n", i, ticks[i]);
       }
   }
+  __HAL_GPIO_EXTI_CLEAR_FALLING_IT(PIN_ADC_DA);
 }
