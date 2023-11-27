@@ -66,6 +66,44 @@ static inline uint8_t bit_rev(uint8_t x)
   return x;
 }
 
+static inline void ble_encode_packet(uint8_t *packet, uint8_t len, uint8_t ch)
+{
+  // CRC
+  uint8_t crc[3] = {0x55, 0x55, 0x55};
+  for (uint8_t i = 0; i < len; i++) {
+    uint8_t d = packet[i];
+    for (uint8_t v = 0; v < 8; v++, d >>= 1) {
+      uint8_t t;
+      if (crc[0] & 0x80) { t = 1;       } crc[0] <<= 1;
+      if (crc[1] & 0x80) { crc[0] |= 1; } crc[1] <<= 1;
+      if (crc[2] & 0x80) { crc[1] |= 1; } crc[2] <<= 1;
+      if (t != (d & 1)) {
+        crc[2] ^= 0x5B;
+        crc[1] ^= 0x06;
+      }
+    }
+  }
+  packet[len + 0] = bit_rev(crc[0]);
+  packet[len + 1] = bit_rev(crc[1]);
+  packet[len + 2] = bit_rev(crc[2]);
+
+  // Whiten
+  uint8_t whiten_coeff = bit_rev(ch) | 2;
+  for (uint8_t i = 0; i < len; i++) {
+    for (uint8_t m = 1; m != 0; m <<= 1) {
+      if (whiten_coeff & 0x80) {
+        whiten_coeff ^= 0x11;
+        packet[i] ^= m;
+      }
+      whiten_coeff <<= 1;
+    }
+  }
+
+  // Reverse all bits
+  for (uint8_t i = 0; i < len + 3; i++)
+    packet[i] = bit_rev(packet[i]);
+}
+
 int main()
 {
   HAL_Init();
@@ -129,9 +167,11 @@ int main()
   while (HAL_GPIO_ReadPin(GPIOA, PIN_ADC_DA) == GPIO_PIN_SET) { }
   adc_configure();
 
-  // PA12 - EXIT line 12
+  // PA12 - EXTI line 12
+/*
   HAL_NVIC_SetPriority(EXTI4_15_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
+*/
 
   // Pull down clock / chip select signal and wait for DRDY
   HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_RESET);
@@ -190,6 +230,63 @@ int main()
   HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_SET);
   swv_printf("received data = %02x %02x\n", spi_rx[0], spi_rx[1]);
   // 0e 06
+
+  uint8_t nrf_ch[3] = { 2, 26, 80};
+  uint8_t ble_ch[3] = {37, 38, 39};
+  uint8_t cur_ch = 0;
+
+  while (true) {
+    uint8_t nRF_cmd_buf[33];
+    uint8_t *buf = nRF_cmd_buf + 1;
+    uint8_t p = 0;
+    // PDU - Protocol Data Unit
+    // AD - Advertising Data
+    // PDU header
+    buf[p++] = 0x40;  // Type: SCAN_RSP; TxAdd is random
+    buf[p++] = 0;     // Payload length, to be filled
+    // PDU payload
+    buf[p++] = 0xAA;  // Address
+    buf[p++] = 0xBB;
+    buf[p++] = 0xCC;
+    buf[p++] = 0xEE;
+    buf[p++] = 0xDF;
+    buf[p++] = 0x00;
+    buf[p++] = 2;     // AD length
+    buf[p++] = 1;     // Type: Flags
+    buf[p++] = 0x05;
+    buf[p++] = 7;     // AD length
+    buf[p++] = 8;     // Type: Shortened local name
+    buf[p++] = 'n';
+    buf[p++] = 'R';
+    buf[p++] = 'F';
+    buf[p++] = ' ';
+    buf[p++] = 'L';
+    buf[p++] = 'E';
+    buf[1] = 17;      // Payload length
+
+    // Encode packet
+    cur_ch = (cur_ch + 1) % 3;
+    ble_encode_packet(buf, p, ble_ch[cur_ch]);
+
+    nRF_send(0x25, nrf_ch[cur_ch]); // RF_CH: Set channel
+    nRF_send(0x27, 0x70); // STATUS: Clear status flags
+    nRF_send(0xE1); // FLUSH_TX
+    nRF_send(0xE2); // FLUSH_RX
+    nRF_cmd_buf[0] = 0xA0;  // W_TX_PAYLOAD
+    nRF_send_len(nRF_cmd_buf, p + 4);
+    HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_SET);
+    /* while (1) {
+      HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_RESET);
+      uint8_t spi_tx[1] = {0xFF};
+      uint8_t spi_rx[1];
+      HAL_SPI_TransmitReceive(&spi1, spi_tx, spi_rx, 1, 1000);
+      HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_SET);
+      swv_printf("received data = %02x\n", spi_rx[0]);
+      HAL_Delay(1);
+    } */
+    HAL_Delay(20);
+    HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_RESET);
+  }
 
   while (true) {
     HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_RESET);
