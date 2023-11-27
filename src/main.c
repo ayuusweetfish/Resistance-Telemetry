@@ -47,6 +47,25 @@ SPI_HandleTypeDef spi1 = { 0 };
 #define PIN_nRF_CS  GPIO_PIN_0
 #define PIN_nRF_CE  GPIO_PIN_3
 
+static inline void nRF_send_len(const uint8_t *cmd, uint32_t size)
+{
+  HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_RESET);
+  HAL_SPI_Transmit(&spi1, (uint8_t *)cmd, size, 1000);
+  HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_SET);
+}
+#define nRF_send(...) do { \
+  uint8_t buf[] = {__VA_ARGS__}; \
+  nRF_send_len(buf, sizeof buf); \
+} while (0)
+
+static inline uint8_t bit_rev(uint8_t x)
+{
+  x = (x & 0b00001111) << 4 | (x & 0b11110000) >> 4;
+  x = (x & 0b00110011) << 2 | (x & 0b11001100) >> 2;
+  x = (x & 0b01010101) << 1 | (x & 0b10101010) >> 1;
+  return x;
+}
+
 int main()
 {
   HAL_Init();
@@ -148,23 +167,29 @@ int main()
   HAL_SPI_Init(&spi1);
   __HAL_SPI_ENABLE(&spi1);
 
+  // Set up nRF24L01+
+  nRF_send(0x20, 0x72); // CONFIG: Disable IRQ and CRC, power up
+  nRF_send(0x21, 0x00); // EN_AA: Disable auto ack.
+  nRF_send(0x22, 0x00); // EN_RXADDR: Disable RX completely
+  nRF_send(0x23, 0x02); // SETUP_AW: 4-byte address
+  nRF_send(0x24, 0x00); // SETUP_RETR: Disable auto restransmission
+  nRF_send(0x26, 0x06); // RF_SETUP: 1 Mbps, 0 dBm
+  nRF_send(0x27, 0x70); // STATUS: Clear status flags
+  nRF_send(0x31, 32);   // RX_PW_P0: Pipe 0 payload length 32 bytes
+  nRF_send(0x22, 0x01); // EN_RXADDR: Enable RX on pipe 0
+  nRF_send(0x2A, bit_rev(0x8E), bit_rev(0x89), bit_rev(0xBE), bit_rev(0xD6));
+    // RX_ADDR_P0: Set pipe 0 receive address
+  nRF_send(0x30, bit_rev(0x8E), bit_rev(0x89), bit_rev(0xBE), bit_rev(0xD6));
+    // TX_ADDR: Set transmit address
+
   // Read register 0x06 (RF_SETUP)
-/*
-  HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_RESET);
-  uint8_t cmd = 0x06;
-  HAL_SPI_Transmit(&spi1, &cmd, 1, 1000);
-  uint8_t data[1];
-  HAL_SPI_Receive(&spi1, data, 1, 1000);
-  HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_SET);
-  swv_printf("received data = %02x\n", data[0]);
-*/
   HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_RESET);
   uint8_t spi_tx[2] = {0x06, 0x00};
   uint8_t spi_rx[2];
   HAL_SPI_TransmitReceive(&spi1, spi_tx, spi_rx, 2, 1000);
   HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_SET);
   swv_printf("received data = %02x %02x\n", spi_rx[0], spi_rx[1]);
-  // 0e 0f
+  // 0e 06
 
   while (true) {
     HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_RESET);
