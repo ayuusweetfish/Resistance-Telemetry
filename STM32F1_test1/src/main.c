@@ -69,7 +69,7 @@ static inline void ble_encode_packet(uint8_t *packet, uint8_t len, uint8_t ch)
   for (uint8_t i = 0; i < len; i++) {
     uint8_t d = packet[i];
     for (uint8_t v = 0; v < 8; v++, d >>= 1) {
-      uint8_t t;
+      uint8_t t = 0;
       if (crc[0] & 0x80) { t = 1;       } crc[0] <<= 1;
       if (crc[1] & 0x80) { crc[0] |= 1; } crc[1] <<= 1;
       if (crc[2] & 0x80) { crc[1] |= 1; } crc[2] <<= 1;
@@ -85,7 +85,7 @@ static inline void ble_encode_packet(uint8_t *packet, uint8_t len, uint8_t ch)
 
   // Whiten
   uint8_t whiten_coeff = bit_rev(ch) | 2;
-  for (uint8_t i = 0; i < len; i++) {
+  for (uint8_t i = 0; i < len + 3; i++) {
     for (uint8_t m = 1; m != 0; m <<= 1) {
       if (whiten_coeff & 0x80) {
         whiten_coeff ^= 0x11;
@@ -229,7 +229,7 @@ int main()
     buf[p++] = 0xCC;
     buf[p++] = 0xEE;
     buf[p++] = 0xDF;
-    buf[p++] = 0x00;
+    buf[p++] = 0xC0;
     buf[p++] = 2;     // AD length
     buf[p++] = 1;     // Type: Flags
     buf[p++] = 0x05;
@@ -265,6 +265,13 @@ int main()
     } */
     HAL_Delay(20);
     HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_RESET);
+
+    static uint8_t count = 0, parity = 0;
+    if (++count == 10) {
+      count = 0;
+      parity ^= 1;
+      HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, parity);
+    }
   }
 
   while (1) {
