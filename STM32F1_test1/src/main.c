@@ -214,12 +214,15 @@ int main()
   uint8_t ble_ch[3] = {37, 38, 39};
   uint8_t cur_ch = 0;
 
+  uint32_t data = 0;
+
   while (true) {
     uint8_t nRF_cmd_buf[33];
     uint8_t *buf = nRF_cmd_buf + 1;
     uint8_t p = 0;
     // PDU - Protocol Data Unit
     // AD - Advertising Data
+    // For assigned numbers, see https://www.bluetooth.com/specifications/an/
     // PDU header
     buf[p++] = 0x40;  // Type: SCAN_RSP; TxAdd is random
     buf[p++] = 0;     // Payload length, to be filled
@@ -231,17 +234,26 @@ int main()
     buf[p++] = 0xDF;
     buf[p++] = 0xC0;
     buf[p++] = 2;     // AD length
-    buf[p++] = 1;     // Type: Flags
+    buf[p++] = 0x01;  // Type: Flags
     buf[p++] = 0x05;
-    buf[p++] = 7;     // AD length
-    buf[p++] = 8;     // Type: Shortened local name
+    buf[p++] = 8;     // AD length
+    buf[p++] = 0x08;  // Type: Shortened local name
     buf[p++] = 'n';
     buf[p++] = 'R';
     buf[p++] = 'F';
     buf[p++] = ' ';
+    buf[p++] = 'B';
     buf[p++] = 'L';
     buf[p++] = 'E';
-    buf[1] = 17;      // Payload length
+    buf[p++] = 6;     // AD length
+    buf[p++] = 0x16;  // Type: Service Data - 16-bit UUID
+    buf[p++] = 0x1C;
+    buf[p++] = 0x18;  // UUID 0x18C: User Data service
+    buf[p++] = (data >> 16) & 0xFF;
+    buf[p++] = (data >>  8) & 0xFF;
+    buf[p++] = (data >>  0) & 0xFF;
+    buf[1] = p - 2;   // Payload length
+    data += 1;
 
     // Encode packet
     cur_ch = (cur_ch + 1) % 3;
