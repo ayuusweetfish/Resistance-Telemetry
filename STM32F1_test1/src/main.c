@@ -224,7 +224,7 @@ int main()
     // AD - Advertising Data
     // For assigned numbers, see https://www.bluetooth.com/specifications/an/
     // PDU header
-    buf[p++] = 0x40;  // Type: SCAN_RSP; TxAdd is random
+    buf[p++] = 0x42;  // Type: ADV_NONCONN_IND; TxAdd is random
     buf[p++] = 0;     // Payload length, to be filled
     // PDU payload
     buf[p++] = 0xAA;  // Address

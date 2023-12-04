@@ -73,7 +73,7 @@ static inline void ble_encode_packet(uint8_t *packet, uint8_t len, uint8_t ch)
   for (uint8_t i = 0; i < len; i++) {
     uint8_t d = packet[i];
     for (uint8_t v = 0; v < 8; v++, d >>= 1) {
-      uint8_t t;
+      uint8_t t = 0;
       if (crc[0] & 0x80) { t = 1;       } crc[0] <<= 1;
       if (crc[1] & 0x80) { crc[0] |= 1; } crc[1] <<= 1;
       if (crc[2] & 0x80) { crc[1] |= 1; } crc[2] <<= 1;
@@ -89,7 +89,7 @@ static inline void ble_encode_packet(uint8_t *packet, uint8_t len, uint8_t ch)
 
   // Whiten
   uint8_t whiten_coeff = bit_rev(ch) | 2;
-  for (uint8_t i = 0; i < len; i++) {
+  for (uint8_t i = 0; i < len + 3; i++) {
     for (uint8_t m = 1; m != 0; m <<= 1) {
       if (whiten_coeff & 0x80) {
         whiten_coeff ^= 0x11;
@@ -235,14 +235,17 @@ int main()
   uint8_t ble_ch[3] = {37, 38, 39};
   uint8_t cur_ch = 0;
 
+  uint32_t data = 0;
+
   while (true) {
     uint8_t nRF_cmd_buf[33];
     uint8_t *buf = nRF_cmd_buf + 1;
     uint8_t p = 0;
     // PDU - Protocol Data Unit
     // AD - Advertising Data
+    // For assigned numbers, see https://www.bluetooth.com/specifications/an/
     // PDU header
-    buf[p++] = 0x40;  // Type: SCAN_RSP; TxAdd is random
+    buf[p++] = 0x42;  // Type: ADV_NONCONN_IND; TxAdd is random
     buf[p++] = 0;     // Payload length, to be filled
     // PDU payload
     buf[p++] = 0xAA;  // Address
@@ -250,19 +253,28 @@ int main()
     buf[p++] = 0xCC;
     buf[p++] = 0xEE;
     buf[p++] = 0xDF;
-    buf[p++] = 0x00;
+    buf[p++] = 0xC0;
     buf[p++] = 2;     // AD length
-    buf[p++] = 1;     // Type: Flags
+    buf[p++] = 0x01;  // Type: Flags
     buf[p++] = 0x05;
-    buf[p++] = 7;     // AD length
-    buf[p++] = 8;     // Type: Shortened local name
+    buf[p++] = 8;     // AD length
+    buf[p++] = 0x08;  // Type: Shortened local name
     buf[p++] = 'n';
     buf[p++] = 'R';
     buf[p++] = 'F';
     buf[p++] = ' ';
+    buf[p++] = 'B';
     buf[p++] = 'L';
     buf[p++] = 'E';
-    buf[1] = 17;      // Payload length
+    buf[p++] = 6;     // AD length
+    buf[p++] = 0x16;  // Type: Service Data - 16-bit UUID
+    buf[p++] = 0x1C;
+    buf[p++] = 0x18;  // UUID 0x18C: User Data service
+    buf[p++] = (data >> 16) & 0xFF;
+    buf[p++] = (data >>  8) & 0xFF;
+    buf[p++] = (data >>  0) & 0xFF;
+    buf[1] = p - 2;   // Payload length
+    data += 1;
 
     // Encode packet
     cur_ch = (cur_ch + 1) % 3;
