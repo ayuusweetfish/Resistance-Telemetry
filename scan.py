@@ -5,10 +5,15 @@ import datetime
 
 async def main():
   while True:
-    devices = await BleakScanner.discover(timeout=0.5, return_adv=True)
+    devices = await BleakScanner.discover(timeout=0.2, return_adv=True)
+    found = False
     for k, (d, adv) in devices.items():
-      if d.name == 'nRF BLE':
+      if d.name == 'RC':
         print(k, d.name, adv)
+        found = True
+        break
+    if not found:
+      print('Not found')
 """
 async def main():
   scanner = BleakScanner()
