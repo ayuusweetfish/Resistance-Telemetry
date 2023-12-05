@@ -1,0 +1,4 @@
+cmake SimpleBLE/simpleble -B build_simpleble
+(cd build_simpleble; make -j4)
+
+Built binaries are at build_simpleble/lib
