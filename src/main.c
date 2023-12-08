@@ -104,6 +104,22 @@ static inline void ble_encode_packet(uint8_t *packet, uint8_t len, uint8_t ch)
     packet[i] = bit_rev(packet[i]);
 }
 
+void compress_24b_values(uint32_t *values, size_t count, uint8_t *buffer, size_t length)
+{
+  buffer[0] = (values[0] >>  0) & 0xff;
+  buffer[1] = (values[0] >>  8) & 0xff;
+  buffer[2] = (values[0] >> 16) & 0xff;
+  size_t n = 1; // Values pointer
+  size_t p = 3; // Buffer pointer
+  while (n < count && p < length) {
+    float x[n][n];
+    for (int i = 0; i < n; i++)
+      x[i][i] = 0;
+  }
+}
+
+static volatile uint32_t adc_value = 0;
+
 int main()
 {
   HAL_Init();
@@ -168,10 +184,8 @@ int main()
   adc_configure();
 
   // PA12 - EXTI line 12
-/*
   HAL_NVIC_SetPriority(EXTI4_15_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(EXTI4_15_IRQn);
-*/
 
   // Pull down clock / chip select signal and wait for DRDY
   HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_RESET);
@@ -235,9 +249,15 @@ int main()
   uint8_t ble_ch[3] = {37, 38, 39};
   uint8_t cur_ch = 0;
 
-  uint32_t data = 0;
+  uint8_t timestamp = 0;
+  uint32_t collected_data[10] = { 0 };
 
   while (true) {
+    timestamp += 1;   // May overflow and wrap around
+    for (int i = 9; i > 0; i--) collected_data[i] = collected_data[i - 1];
+    // collected_data[0] = (uint32_t)timestamp * timestamp * 5;
+    collected_data[0] = adc_value;
+
     uint8_t nRF_cmd_buf[33];
     uint8_t *buf = nRF_cmd_buf + 1;
     uint8_t p = 0;
@@ -261,22 +281,16 @@ int main()
     buf[p++] = 0x08;  // Type: Shortened Local Name
     buf[p++] = 'R';
     buf[p++] = 'C';
-    buf[p++] = 13;    // AD length
+    // buf[p++] = 13;    // AD length
+    buf[p++] = 5;     // AD length
     buf[p++] = 0xFF;  // Type: Manufacturer Specific Data
-    buf[p++] = (data >> 16) & 0xFF;
-    buf[p++] = (data >>  8) & 0xFF;
-    buf[p++] = (data >>  0) & 0xFF;
-    buf[p++] = (data >> 16) & 0xFF;
-    buf[p++] = (data >>  8) & 0xFF;
-    buf[p++] = (data >>  0) & 0xFF;
-    buf[p++] = (data >> 16) & 0xFF;
-    buf[p++] = (data >>  8) & 0xFF;
-    buf[p++] = (data >>  0) & 0xFF;
-    buf[p++] = (data >> 16) & 0xFF;
-    buf[p++] = (data >>  8) & 0xFF;
-    buf[p++] = (data >>  0) & 0xFF;
+    buf[p++] = timestamp;
+    // compress_24b_values(collected_data, 10, buf + p, 11);
+    // p += 11;
+    buf[p++] = (collected_data[0] >> 16) & 0xff;
+    buf[p++] = (collected_data[0] >>  8) & 0xff;
+    buf[p++] = (collected_data[0] >>  0) & 0xff;
     buf[1] = p - 2;   // Payload length
-    data += 1;
 
     // Encode packet
     cur_ch = (cur_ch + 1) % 3;
@@ -289,17 +303,10 @@ int main()
     nRF_cmd_buf[0] = 0xA0;  // W_TX_PAYLOAD
     nRF_send_len(nRF_cmd_buf, p + 4);
     HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_SET);
-    /* while (1) {
-      HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_RESET);
-      uint8_t spi_tx[1] = {0xFF};
-      uint8_t spi_rx[1];
-      HAL_SPI_TransmitReceive(&spi1, spi_tx, spi_rx, 1, 1000);
-      HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_SET);
-      swv_printf("received data = %02x\n", spi_rx[0]);
-      HAL_Delay(1);
-    } */
     HAL_Delay(20);
     HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_RESET);
+
+    swv_printf("ADC value = %06x\n", collected_data[0]);
   }
 
   while (true) {
@@ -373,6 +380,7 @@ static inline uint32_t adc_read()
 
 void EXTI4_15_IRQHandler()
 {
+  /*
   static uint32_t ticks[20];
   static int ticks_count = 0;
   if (ticks_count < 20) {
@@ -383,5 +391,7 @@ void EXTI4_15_IRQHandler()
         swv_printf("[%02d] = %06x\n", i, ticks[i]);
       }
   }
+  */
+  adc_value = adc_read();
   __HAL_GPIO_EXTI_CLEAR_FALLING_IT(PIN_ADC_DA);
 }

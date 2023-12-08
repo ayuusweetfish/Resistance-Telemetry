@@ -18,28 +18,27 @@ int main() {
   }
   auto adapter = adapters[0];
 
-/*
-  adapter.set_callback_on_scan_found([] (SimpleBLE::Peripheral p) {
-    printf("Found   %s, %d dBm, %s\n", p.address().c_str(), p.rssi(), p.identifier().c_str());
-  });
-  adapter.set_callback_on_scan_updated([] (SimpleBLE::Peripheral p) {
-    printf("Updated %s, %d dBm, %s\n", p.address().c_str(), p.rssi(), p.identifier().c_str());
-  });
-*/
   auto upd_print = [] (SimpleBLE::Peripheral p) {
     if (p.identifier() == "RC") {
       auto mfr_data = p.manufacturer_data();
       for (auto &[x, y] : mfr_data) {
-        printf("%04x", x);
-        for (int i = 0; i < y.length(); i++) printf(" %02x", (uint8_t)y[i]);
-        putchar('\n');
+        // printf("%02x %02x", x & 0xff, (x >> 8) & 0xff);
+        // for (int i = 0; i < y.length(); i++) printf(" %02x", (uint8_t)y[i]);
+        // putchar('\n');
+        uint8_t timestamp = x & 0xff;
+        uint32_t value0 = 
+          ((uint32_t)((x >> 8) & 0xff) << 16) |
+          ((uint32_t)(y[0] & 0xff) << 8) |
+          (y[1] & 0xff);
+        printf("t = %3d: %9.6lf\n", timestamp, (double)((int32_t)(value0 << 8) >> 8) / 0x7fffff);
       }
     }
   };
   adapter.set_callback_on_scan_found(upd_print);
   adapter.set_callback_on_scan_updated(upd_print);
 
-  adapter.scan_for(10000);
+  printf("Starting scan\n");
+  adapter.scan_for(100000);
 
   return 0;
 }
