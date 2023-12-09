@@ -348,8 +348,11 @@ inline void adc_configure()
   gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
   HAL_GPIO_Init(GPIOA, &gpio_init);
   // SPEED_SEL = 0b00: 10 Hz
-  // PGA_SEL = 01: PGA gain = 2
-  uint8_t writes[2] = {0x65 << 1, 0b00000100};
+  // PGA_SEL = 00: PGA gain = 1
+  // Example: input 6.8k -- 0xa73900 = -5818112 = -0.3467865 FS
+  // -0.3468 = -0.35 + 0.9% = 1.2/(1.2+6.8) - 0.5
+  // Calculated R = 1.2 kΩ * (1 / (0.5 + ADC value / (2^24)) - 1)
+  uint8_t writes[2] = {0x65 << 1, 0b00000000};
   for (int i = 0; i < 16; i++) {
     HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_SET);
     HAL_GPIO_WritePin(GPIOA, PIN_ADC_DA, (writes[i / 8] >> (7 - i % 8)) & 1);

@@ -4,6 +4,7 @@
 
 #include <cassert>
 #include <cstdio>
+#include <unistd.h>
 
 int main() {
   if (!SimpleBLE::Adapter::bluetooth_enabled()) {
@@ -30,8 +31,9 @@ int main() {
           ((uint32_t)((x >> 8) & 0xff) << 16) |
           ((uint32_t)(y[0] & 0xff) << 8) |
           (y[1] & 0xff);
-        // printf("t = %3d: %9.6lf\n", timestamp, (double)((int32_t)(value0 << 8) >> 8) / 0x7fffff);
-        printf("t = %3d: %06x\n", timestamp, value0);
+        double normalized = (double)((int32_t)(value0 << 8) >> 8) / 0x1000000;
+        double resistance = 1210 * (1.0 / (0.5 + normalized) - 1);
+        printf("t = %3d: ADC = %06x  R = %11.4lf\n", timestamp, value0, resistance);
       }
     }
   };
@@ -39,7 +41,9 @@ int main() {
   adapter.set_callback_on_scan_updated(upd_print);
 
   printf("Starting scan\n");
-  adapter.scan_for(100000);
+  adapter.scan_start();
+
+  while (1) sleep(1);
 
   return 0;
 }
