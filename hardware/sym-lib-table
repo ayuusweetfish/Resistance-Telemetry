@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "ResSensor_symbols")(type "KiCad")(uri "${KIPRJMOD}/ResSensor_symbols.kicad_sym")(options "")(descr ""))
+)
