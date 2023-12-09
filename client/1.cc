@@ -30,7 +30,8 @@ int main() {
           ((uint32_t)((x >> 8) & 0xff) << 16) |
           ((uint32_t)(y[0] & 0xff) << 8) |
           (y[1] & 0xff);
-        printf("t = %3d: %9.6lf\n", timestamp, (double)((int32_t)(value0 << 8) >> 8) / 0x7fffff);
+        // printf("t = %3d: %9.6lf\n", timestamp, (double)((int32_t)(value0 << 8) >> 8) / 0x7fffff);
+        printf("t = %3d: %06x\n", timestamp, value0);
       }
     }
   };
