@@ -1,12 +1,15 @@
-// c++ % -ISimpleBLE/simpleble/include -Ibuild_simpleble/export build_simpleble/lib/libsimpleble.a -std=c++17 -framework CoreBluetooth -framework Foundation
+// c++ % -ISimpleBLE/simpleble/include -Ibuild_simpleble/export build_simpleble/lib/libsimpleble.a -Ilibmicrohttpd-0.9.77/src/include libmicrohttpd-0.9.77/src/microhttpd/.libs/libmicrohttpd.a -std=c++17 -framework CoreBluetooth -framework Foundation
 
 #include "simpleble/SimpleBLE.h"
+#include "microhttpd.h"
 
 #include <cassert>
 #include <cstdio>
+#include <cstring>
 #include <unistd.h>
 
 int main() {
+if (0) {
   if (!SimpleBLE::Adapter::bluetooth_enabled()) {
     printf("Bluetooth not enabled\n");
     return 1;
@@ -33,7 +36,8 @@ int main() {
           (y[1] & 0xff);
         double normalized = (double)((int32_t)(value0 << 8) >> 8) / 0x1000000;
         double resistance = 1210 * (1.0 / (0.5 + normalized) - 1);
-        printf("t = %3d: ADC = %06x  R = %11.4lf\n", timestamp, value0, resistance);
+        fprintf(stderr, "t = %3d: ADC = %06x  R = %11.4lf\n", timestamp, value0, resistance);
+        printf("%d %.12lf\n", (int)timestamp, normalized);
       }
     }
   };
@@ -42,8 +46,47 @@ int main() {
 
   printf("Starting scan\n");
   adapter.scan_start();
+}
+
+  auto request_handler = [] (
+    void *cls,
+    struct MHD_Connection *conn,
+    const char *url,
+    const char *method,
+    const char *version,
+    const char *upload_data,
+    size_t *upload_data_size,
+    void **ptr)
+  -> enum MHD_Result {
+    enum MHD_Result result;
+
+    if (strcmp(method, "GET") != 0) {
+      struct MHD_Response *resp = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_PERSISTENT);
+      result = MHD_queue_response(conn, MHD_HTTP_METHOD_NOT_ALLOWED /* 405 */, resp);
+      MHD_destroy_response(resp);
+      return result;
+    }
+
+    struct MHD_Response *resp = MHD_create_response_from_buffer(
+      31, (void *)"<html><body>hello</body></html>", MHD_RESPMEM_PERSISTENT);
+    MHD_add_response_header(resp, "Content-Type", "text/html");
+    result = MHD_queue_response(conn, MHD_HTTP_OK /* 200 */, resp);
+    MHD_destroy_response(resp);
+
+    return result;
+  };
+
+  struct MHD_Daemon *daemon = MHD_start_daemon(
+    MHD_USE_SELECT_INTERNALLY,
+    24017,
+    (MHD_AcceptPolicyCallback)NULL, (void *)NULL,
+    (MHD_AccessHandlerCallback)+request_handler, (void *)NULL,
+    MHD_OPTION_END
+  );
+  printf("http://localhost:24017/\n");
 
   while (1) sleep(1);
+  MHD_stop_daemon(daemon);
 
   return 0;
 }
