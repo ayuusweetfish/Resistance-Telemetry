@@ -8,6 +8,11 @@
 #include <cstring>
 #include <unistd.h>
 
+// xxd -i index.html > index.html.h
+#include "index.html.h"
+// unsigned char index_html[]
+// unsigned int index_html_len
+
 int main() {
 if (0) {
   if (!SimpleBLE::Adapter::bluetooth_enabled()) {
@@ -68,7 +73,8 @@ if (0) {
     }
 
     struct MHD_Response *resp = MHD_create_response_from_buffer(
-      31, (void *)"<html><body>hello</body></html>", MHD_RESPMEM_PERSISTENT);
+      index_html_len, (void *)index_html,
+      MHD_RESPMEM_PERSISTENT);
     MHD_add_response_header(resp, "Content-Type", "text/html");
     result = MHD_queue_response(conn, MHD_HTTP_OK /* 200 */, resp);
     MHD_destroy_response(resp);
