@@ -4,9 +4,19 @@
 #include "microhttpd.h"
 
 #include <cassert>
+#include <cerrno>
+#include <climits>    // INT_MAX
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <unistd.h>
+
+#include <algorithm>  // std::upper_bound
+#include <deque>
+#include <mutex>
+#include <sstream>    // std::ostringstream
+#include <utility>    // std::pair
+#include <vector>
 
 #define USE_BUILTIN_INDEX_HTML 0
 #if USE_BUILTIN_INDEX_HTML
@@ -18,6 +28,9 @@
 unsigned char index_html[4000000];
 unsigned int index_html_len;
 #endif
+
+std::deque<std::pair<int, int>> readings;
+std::mutex readings_mutex;
 
 int main() {
 #if !USE_BUILTIN_INDEX_HTML
@@ -89,13 +102,50 @@ if (0) {
       return result;
     }
 
-    struct MHD_Response *resp = MHD_create_response_from_buffer(
-      index_html_len, (void *)index_html,
-      MHD_RESPMEM_PERSISTENT);
-    MHD_add_response_header(resp, "Content-Type", "text/html");
-    result = MHD_queue_response(conn, MHD_HTTP_OK /* 200 */, resp);
-    MHD_destroy_response(resp);
+    if (strcmp(url, "/") == 0) {
+      struct MHD_Response *resp = MHD_create_response_from_buffer(
+        index_html_len, (void *)index_html,
+        MHD_RESPMEM_PERSISTENT);
+      MHD_add_response_header(resp, "Content-Type", "text/html; charset=UTF-8");
+      result = MHD_queue_response(conn, MHD_HTTP_OK /* 200 */, resp);
+      MHD_destroy_response(resp);
+      return result;
+    }
 
+    if (strcmp(url, "/data") == 0) {
+      const char *since_str = MHD_lookup_connection_value(conn, MHD_GET_ARGUMENT_KIND, "since");
+      int since;
+      errno = 0;
+      if (since_str == NULL || (since = (int)strtol(since_str, NULL, 0), errno) != 0) {
+        struct MHD_Response *resp = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_PERSISTENT);
+        result = MHD_queue_response(conn, MHD_HTTP_BAD_REQUEST /* 400 */, resp);
+        MHD_destroy_response(resp);
+        return result;
+      }
+      // Read the values
+      readings_mutex.lock();
+      auto itr = std::upper_bound(readings.begin(), readings.end(),
+        std::make_pair(since, INT_MAX));
+      std::vector<std::pair<int, int>> returned_values(itr, readings.end());
+      readings_mutex.unlock();
+      // Convert to space-separated string
+      std::ostringstream ss;
+      for (auto entry : returned_values) {
+        if (ss.tellp() != 0) ss << ' ';
+        ss << entry.first << ' ' << entry.second;
+      }
+      struct MHD_Response *resp = MHD_create_response_from_buffer(
+        ss.tellp(), (void *)ss.str().c_str(),
+        MHD_RESPMEM_MUST_COPY);
+      MHD_add_response_header(resp, "Content-Type", "text/plain");
+      result = MHD_queue_response(conn, MHD_HTTP_OK /* 200 */, resp);
+      MHD_destroy_response(resp);
+      return result;
+    }
+
+    struct MHD_Response *resp = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_PERSISTENT);
+    result = MHD_queue_response(conn, MHD_HTTP_NOT_FOUND /* 404 */, resp);
+    MHD_destroy_response(resp);
     return result;
   };
 
@@ -108,7 +158,14 @@ if (0) {
   );
   printf("http://localhost:24017/\n");
 
-  while (1) sleep(1);
+  int x = 0;
+  while (1) {
+    x++;
+    readings_mutex.lock();
+    readings.push_back({x, 1000 + x * 20 + (99999999 / x) * 477 % 997});
+    readings_mutex.unlock();
+    usleep(200000);
+  }
   MHD_stop_daemon(daemon);
 
   return 0;

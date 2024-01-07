@@ -16,10 +16,6 @@
 </script><script>
 const labels = []
 const data = []
-for (let i = 0; i < 500; i++) {
-  labels.push(i)
-  data.push(10000 + (210 - i) * (i - 210) / 10 + (Math.floor(99999999 / (i + 1)) * 477) % 997)
-}
 var trace1 = {
   x: labels,
   y: data,
@@ -30,14 +26,19 @@ var trace1 = {
 Plotly.newPlot('plot', [trace1], null, {scrollZoom: true, responsive: true, displayModeBar: true});
 
 setInterval(() => {
-  const x = labels[labels.length - 1] + 1
-  if (labels.length >= 520) {
-    labels.shift()
-    data.shift()
-  }
-  labels.push(x)
-  data.push(x * 20)
-  Plotly.redraw('plot')
+  const since = (labels.length === 0 ? 0 : labels[labels.length - 1])
+  fetch('/data?since=' + since).then((resp) => {
+    if (resp.ok) {
+      resp.text().then((text) => {
+        const values = text.split(' ')
+        for (let i = 0; i < values.length; i += 2) {
+          labels.push(+values[i])
+          data.push(+values[i + 1])
+        }
+        Plotly.redraw('plot')
+      })
+    }
+  })
 }, 200)
 </script>
 </body></html>
