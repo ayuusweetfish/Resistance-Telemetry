@@ -8,12 +8,29 @@
 #include <cstring>
 #include <unistd.h>
 
+#define USE_BUILTIN_INDEX_HTML 0
+#if USE_BUILTIN_INDEX_HTML
 // xxd -i index.html > index.html.h
 #include "index.html.h"
 // unsigned char index_html[]
 // unsigned int index_html_len
+#else
+unsigned char index_html[4000000];
+unsigned int index_html_len;
+#endif
 
 int main() {
+#if !USE_BUILTIN_INDEX_HTML
+  {
+    FILE *f = fopen("index.html", "rb");
+    fseek(f, 0, SEEK_END);
+    index_html_len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    fread(index_html, index_html_len, 1, f);
+    fclose(f);
+  }
+#endif
+
 if (0) {
   if (!SimpleBLE::Adapter::bluetooth_enabled()) {
     printf("Bluetooth not enabled\n");
