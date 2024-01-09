@@ -43,19 +43,8 @@ static inline void mat_mul(
     }
 }
 
-#define SQR(_x) ((_x) * (_x))
-#define SIGN(_a, _b) ((_b) >= 0 ? \
-  ((_a) >= 0 ? (_a) : -(_a)) : \
-  ((_a) >= 0 ? -(_a) : (_a)))
-#define MIN(_a, _b) ((_a) < (_b) ? (_a) : (_b))
-#define MAX(_a, _b) ((_a) > (_b) ? (_a) : (_b))
-static inline float pythag(float a, float b)
-{
-  float absa = fabsf(a), absb = fabsf(b);
-  return (absa > absb
-    ? absa * sqrtf(1.0 + SQR(absb / absa))
-    : (absb == 0.0 ? 0.0 : absb * sqrtf(1.0 + SQR(absa / absb))));
-}
+#define min(_a, _b) ((_a) < (_b) ? (_a) : (_b))
+#define max(_a, _b) ((_a) > (_b) ? (_a) : (_b))
 static inline void mat_svd(
   int m, int n,
   float *restrict U,        // m * m
@@ -66,12 +55,13 @@ static inline void mat_svd(
   // Scratch spaces
   float u[m * n];     // m * n
   for (int i = 0; i < m * n; i++) u[i] = A[i];
-  float w[MAX(m, n)]; // max(m, n) * 1
+  float w[max(m, n)]; // max(m, n) * 1
   float *v = V;       // n * n
 
-  // Numerical Recipes
-  // http://numerical.recipes/webnotes/nr3web2.pdf
-  // SVD::decompose()
+  // Numerical Recipes http://numerical.recipes/webnotes/nr3web2.pdf
+  // EISPACK https://www.netlib.org/eispack/svd.f
+
+  // SVD::decompose(), svd()
   bool flag;
   int i, its, j, jj, k, l, nm;
   float anorm, c, f, g, h, s, scale, x, y, z;
@@ -89,7 +79,7 @@ static inline void mat_svd(
           s += u[k * n + i] * u[k * n + i];
         }
         f = u[i * n + i];
-        g = -SIGN(sqrtf(s), f);
+        g = -copysignf(sqrtf(s), f);
         h = f * g - s;
         u[i * n + i] = f - g;
         for (j = l - 1; j < n; j++) {
@@ -110,7 +100,7 @@ static inline void mat_svd(
           s += u[i * n + k] * u[i * n + k];
         }
         f = u[i * n + l - 1];
-        g = -SIGN(sqrtf(s), f);
+        g = -copysignf(sqrtf(s), f);
         h = f * g - s;
         u[i * n + l - 1] = f - g;
         for (k = l - 1; k < n; k++) rv1[k] = u[i * n + k] / h;
@@ -121,7 +111,7 @@ static inline void mat_svd(
         for (k = l - 1; k < n; k++) u[i * n + k] *= scale;
       }
     }
-    anorm = MAX(anorm, (fabsf(w[i]) + fabsf(rv1[i])));
+    anorm = max(anorm, (fabsf(w[i]) + fabsf(rv1[i])));
   }
   for (i = n - 1; i >= 0; i--) { // Accumulation of right-hand transformations.
     if (i < n - 1) {
@@ -139,7 +129,7 @@ static inline void mat_svd(
     g = rv1[i];
     l = i;
   }
-  for (i = MIN(m, n) - 1; i >= 0; i--) {
+  for (i = min(m, n) - 1; i >= 0; i--) {
     // Accumulation of left-hand transformations.
     l = i + 1;
     g = w[i];
@@ -178,7 +168,7 @@ static inline void mat_svd(
           rv1[i] = c * rv1[i];
           if (fabsf(f) <= FLT_EPSILON * anorm) break;
           g = w[i];
-          h = pythag(f, g);
+          h = hypotf(f, g);
           w[i] = h;
           h = 1.0 / h;
           c = g * h;
@@ -207,8 +197,8 @@ static inline void mat_svd(
       g = rv1[nm];
       h = rv1[k];
       f = ((y - z) * (y + z) + (g - h) * (g + h)) / (2.0 * h * y);
-      g = pythag(f, 1.0);
-      f = ((x - z) * (x + z) + h * ((y / (f + SIGN(g, f))) - h)) / x;
+      g = hypotf(f, 1.0);
+      f = ((x - z) * (x + z) + h * ((y / (f + copysignf(g, f))) - h)) / x;
       c = s = 1.0; // Next QR transformation:
       for (j = l; j <= nm; j++) {
         i = j + 1;
@@ -216,7 +206,7 @@ static inline void mat_svd(
         y = w[i];
         h = s * g;
         g = c * g;
-        z = pythag(f, h);
+        z = hypotf(f, h);
         rv1[j] = z;
         c = f / z;
         s = h / z;
@@ -230,7 +220,7 @@ static inline void mat_svd(
           v[jj * n + j] = x * c + z * s;
           v[jj * n + i] = z * c - x * s;
         }
-        z = pythag(f, h);
+        z = hypotf(f, h);
         w[j] = z; // Rotation can be arbitrary if z = 0.
         if (z) {
           z = 1.0 / z;
@@ -307,13 +297,11 @@ static inline void mat_svd(
     for (int j = 0; j < m; j++) U[i * m + j] = u[i * n + j];
     for (int j = m; j < n; j++) U[i * m + j] = 0.;
   }
-  for (int i = 0; i < MIN(m, n); i++)
-    S[i] = MAX(0., w[i]); // Recover negative tags
+  for (int i = 0; i < min(m, n); i++)
+    S[i] = max(0., w[i]); // Recover negative tags
 }
-#undef SQR
-#undef SIGN
-#undef MIN
-#undef MAX
+#undef min
+#undef max
 
 // Data format:
 // All samples' LSB discarded (become 23 bits)
@@ -357,23 +345,19 @@ void compress_24b_values(uint32_t *values, size_t count, uint8_t *buffer, size_t
       A[idx(n, 3, i, 2)] = i * i;
     }
     printf("n = %zu\n", n);
-    mat_print(n, 3, A); putchar('\n');
+    // SVD
     float U[MAX_N * MAX_N], V[3 * 3] = { 0 }, S[3];
     mat_svd(n, 3, U, S, V, A);
-    // mat_print(n, n, U); putchar('\n');
-    // mat_print(1, 3, S); putchar('\n');
-    // mat_print(3, 3, V); putchar('\n');
+    // Calculate pseudoinverse V S^-1 U*
     int k = (n < 3 ? n : 3);
     float Ut[MAX_N * MAX_N], VSiUt[MAX_N * MAX_N];
     mat_transpose(n, n, Ut, U);
-    // mat_print(n, n, Ut); putchar('\n');
     for (int i = 0; i < k; i++) {
       float s = (S[i] > 0 ? 1. / S[i] : 0);
       for (int j = 0; j < n; j++)
         Ut[idx(n, n, i, j)] *= s;
     }
     float *SiUt = Ut; // Truncated to 3 rows if n > 3
-    // mat_print(k, n, SiUt); putchar('\n');
     // V is zero-padded to 3 rows when n < 3
     mat_mul(3, 3, n, VSiUt, V, SiUt);
     mat_print(3, n, VSiUt); putchar('\n');
