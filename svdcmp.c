@@ -1,6 +1,7 @@
 #include <float.h>  // FLT_EPSILON
 #include <math.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 #define SQR(_x) ((_x) * (_x))
 #define SIGN(_a, _b) ((_b) >= 0 ? \
@@ -23,15 +24,13 @@ static inline void mat_svd(
 ) {
   // Numerical Recipes
   // http://numerical.recipes/webnotes/nr3web2.pdf
-  // 'a,'bs/u\[\([^\]()]\+\)\]\[\([^\]()]\+\)\]/u[\1 * n + \2]/g
-  // 'a,'bs/v\[\([^\]()]\+\)\]\[\([^\]()]\+\)\]/v[\1 * n + \2]/g
-  // Alt.: 'a,'bs/\([uv]\)\[\([^\]()]\+\)\]\[\([^\]()]\+\)\]/\1[\2 * n + \3]/g
+  // 'a,'bs/\([uv]\)\[\([^\]()]\+\)\]\[\([^\]()]\+\)\]/\1[\2 * n + \3]/g
 
   // SVD::decompose()
   bool flag;
   int i, its, j, jj, k, l, nm;
   float anorm, c, f, g, h, s, scale, x, y, z;
-  float rv1[100];
+  float rv1[n];
   g = scale = anorm = 0.0; // Householder reduction to bidiagonal form.
   for (i = 0; i < n; i++) {
     l = i + 2;
@@ -155,8 +154,8 @@ static inline void mat_svd(
         }
         break;
       }
-      // if (its == 29)
-      //   throw("no convergence in 30 svdcmp iterations");
+      if (its == 29)
+        puts("no convergence in 30 svdcmp iterations");
       x = w[l]; // Shift from bottom 2-by-2 minor.
       nm = k - 1;
       y = w[nm];
@@ -208,6 +207,15 @@ static inline void mat_svd(
     }
   }
 
+  // Prior to reordering, replace with negative tags
+  // the singular values corresponding to a zero column vector in U
+  // so that they be ordered last
+  for (int j = 0; j < n; j++) {
+    for (i = 0; i < m; i++)
+      if (fabsf(u[i * n + j]) >= FLT_EPSILON * anorm) break;
+    if (i == m) w[j] = -1.0;
+  }
+
   // SVD::reorder()
   int inc = 1;
   float sw;
@@ -246,9 +254,14 @@ static inline void mat_svd(
       for (j = 0; j < n; j++) v[j * n + k] = -v[j * n + k];
     }
   }
-}
 
-#include <stdio.h>
+  // Recover negative tags
+  for (j = n - 1; j >= 0 && w[j] < 0.; j--) w[j] = 0.;
+}
+#undef SQR
+#undef SIGN
+#undef MIN
+#undef MAX
 
 #define idx(_nrows, _ncols, _row, _col) ((_row)*(_ncols) + (_col))
 
@@ -289,6 +302,8 @@ static inline void mat_mul(
 
 int main()
 {
+  const int M = 4;
+  const int N = 5;
   float A[] = {
     1, 0, 0, 0, 2,
     0, 0, 3, 0, 0,
@@ -296,20 +311,20 @@ int main()
     0, 2, 0, 0, 0,
   };
   float w[10], V[100];
-  mat_svd(4, 5, A, w, V);
-  mat_print(4, 5, A); putchar('\n');
-  mat_print(1, 5, w); putchar('\n');
-  mat_print(5, 5, V); putchar('\n');
+  mat_svd(M, N, A, w, V);
+  mat_print(M, N, A); putchar('\n');
+  mat_print(1, N, w); putchar('\n');
+  mat_print(N, N, V); putchar('\n');
 
   float W[100] = { 0 };
-  for (int i = 0; i < 5; i++) W[i * 5 + i] = w[i];
+  for (int i = 0; i < N; i++) W[i * N + i] = w[i];
   float Vt[100], WV[100], UWV[100];
-  mat_transpose(5, 5, Vt, V);
-  mat_mul(5, 5, 5, WV, W, Vt);
-  mat_print(5, 5, W); putchar('\n');
-  mat_print(5, 5, WV); putchar('\n');
-  mat_mul(4, 5, 5, UWV, A, WV);
-  mat_print(5, 5, UWV); putchar('\n');
+  mat_transpose(N, N, Vt, V);
+  mat_mul(N, N, N, WV, W, Vt);
+  mat_print(N, N, W); putchar('\n');
+  mat_print(N, N, WV); putchar('\n');
+  mat_mul(M, N, N, UWV, A, WV);
+  mat_print(M, N, UWV); putchar('\n');
 
   return 0;
 }
