@@ -6,38 +6,47 @@
 #define idx(_nrows, _ncols, _row, _col) ((_row)*(_ncols) + (_col))
 
 static inline void mat_print(
-  int n, int m,
+  int m, int n,
   const float *a
 ) {
-  for (int i = 0; i < n; i++) {
-    for (int j = 0; j < m; j++)
-      printf(" %7.1f", a[idx(n, m, i, j)]);
+  for (int i = 0; i < m; i++) {
+    for (int j = 0; j < n; j++)
+      printf(" %7.1f", a[idx(m, n, i, j)]);
     putchar('\n');
   }
 }
 
 static inline void mat_transpose(
-  int n, int m,
-  float *restrict t,
-  const float *restrict a
+  int m, int n,
+  float *restrict t,        // n * m
+  const float *restrict a   // m * n
 ) {
   for (int j = 0; j < m; j++)
     for (int i = 0; i < n; i++)
-      t[idx(m, n, j, i)] = a[idx(n, m, i, j)];
+      t[idx(m, n, j, i)] = a[idx(m, n, i, j)];
 }
 
 static inline void mat_mul(
-  int n, int m, int p,
-  float *restrict c,
-  const float *restrict a,
-  const float *restrict b
+  int m, int n, int p,
+  float *restrict c,        // m * p
+  const float *restrict a,  // m * n
+  const float *restrict b   // n * p
 ) {
-  for (int i = 0; i < n; i++)
+  for (int i = 0; i < m; i++)
     for (int k = 0; k < p; k++) {
-      c[idx(n, p, i, k)] = 0;
-      for (int j = 0; j < m; j++)
-        c[idx(n, p, i, k)] += a[idx(n, m, i, j)] * b[idx(m, p, j, k)];
+      c[idx(m, p, i, k)] = 0;
+      for (int j = 0; j < n; j++)
+        c[idx(m, p, i, k)] += a[idx(m, n, i, j)] * b[idx(n, p, j, k)];
     }
+}
+
+static inline void mat_svd(
+  int m, int n,
+  float *restrict u,        // m * m
+  float *restrict s,        // min(m, n) * 1
+  float *restrict v,        // n * n
+  const float *restrict a   // m * n
+) {
 }
 
 // Data format:
@@ -67,23 +76,22 @@ void compress_24b_values(uint32_t *values, size_t count, uint8_t *buffer, size_t
   size_t n = 1; // Values pointer
   size_t p = 3; // Buffer pointer
   while (n < count && p < length) {
-    // LLS estimate
-    // X[n*3] = [1 i i^2]
-    // Beta = inv(X' X) X' y
-    float x[MAX_N * 3];
+    // LLS estimate (Moore–Penrose pseudoinverse)
+    // A[n*3] = [1 i i^2]
+    // A[n*3] x[3*1] = b[n*1]
+    // Solution: x = (A* A)^-1 A* b
+    // With SVD: A = U S V*
+    // Solution: x = V S^-1 U* b
+    float A[MAX_N * 3];
     for (int i = 0; i < n; i++) {
-      x[idx(n, 3, i, 0)] = 1;
-      x[idx(n, 3, i, 1)] = i;
-      x[idx(n, 3, i, 2)] = i * i;
+      A[idx(n, 3, i, 0)] = 1;
+      A[idx(n, 3, i, 1)] = i;
+      A[idx(n, 3, i, 2)] = i * i;
     }
-    float xT[3 * MAX_N];
-    mat_transpose(n, 3, xT, x);
     printf("n = %zu\n", n);
-    mat_print(n, 3, x);
-    mat_print(3, n, xT);
-    float a1[3 * 3];
-    mat_mul(3, n, 3, a1, xT, x);
-    mat_print(3, 3, a1);
+    mat_print(n, 3, A);
+    float U[MAX_N * MAX_N], V[3 * 3], S[3];
+    mat_svd(n, 3, A, U, S, V);
     n++;
   }
 }
