@@ -339,9 +339,11 @@ void compress_24b_values(uint32_t *values, size_t count, uint8_t *buffer, size_t
   buffer[0] = (values[0] >>  0) & 0xff;
   buffer[1] = (values[0] >>  8) & 0xff;
   buffer[2] = (values[0] >> 16) & 0xff;
+  float values_f[count];
+  for (int i = 0; i < count; i++) values_f[i] = values[i];
   size_t n = 1; // Values pointer
   size_t p = 3; // Buffer pointer
-  while (n < count && p < length) {
+  while (n < count - 1 && p < length) {
     // LLS estimate (Moore–Penrose pseudoinverse)
     // A[n*3] = [1 i i^2]
     // A[n*3] x[3*1] = b[n*1]
@@ -376,6 +378,20 @@ void compress_24b_values(uint32_t *values, size_t count, uint8_t *buffer, size_t
     mat_mul(3, 3, n, VSiUt, V, SiUt);
     mat_print(3, n, VSiUt); putchar('\n');
 
+    // Multiply the observed values with the pseudoinverse (VSiUt)
+    // `values` is truncated to n * 1
+    float coeff[3];
+    mat_mul(3, n, 1, coeff, VSiUt, values_f);
+    mat_print(1, 3, coeff);
+
+    float predicted = (coeff[2] * n + coeff[1]) * n + coeff[0];
+    if (predicted >= (1 << 23)) predicted = (1 << 23) - 1;
+    if (predicted < -(1 << 23)) predicted = -(1 << 23);
+    int predicted_i = (int)(predicted + 0.5f);
+    printf("predicted: %8d\n", predicted_i);
+    printf("actual:    %8d\n", values[n]);
+    printf("diff:      %8d\n", values[n] - predicted_i);
+
     n++;
   }
 }
@@ -383,7 +399,7 @@ void compress_24b_values(uint32_t *values, size_t count, uint8_t *buffer, size_t
 int main()
 {
   uint32_t values[10];
-  for (int i = 0; i < 10; i++) values[i] = (1 << 16) + i * i * 5 + 997 % (i + 2);
+  for (int i = 0; i < 10; i++) values[i] = (1 << 16) + i * i * 5 + i * 33 + 997 % (i + 2);
   uint8_t buffer[11];
   compress_24b_values(values, 10, buffer, 11);
   return 0;
