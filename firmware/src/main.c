@@ -110,17 +110,15 @@ static inline void ble_encode_packet(uint8_t *packet, uint8_t len, uint8_t ch)
     packet[i] = bit_rev(packet[i]);
 }
 
-void compress_24b_values(uint32_t *values, size_t count, uint8_t *buffer, size_t length)
+static inline void write_bits(uint8_t *buffer, size_t start, size_t length, uint32_t value)
 {
-  buffer[0] = (values[0] >>  0) & 0xff;
-  buffer[1] = (values[0] >>  8) & 0xff;
-  buffer[2] = (values[0] >> 16) & 0xff;
-  size_t n = 1; // Values pointer
-  size_t p = 3; // Buffer pointer
-  while (n < count && p < length) {
-    float x[n][n];
-    for (int i = 0; i < n; i++)
-      x[i][i] = 0;
+  for (int i = 0; i < length; i++) {
+    int index = (start + i) / 8;
+    int bitpos = (start + i) % 8;
+    if (value & (1 << i))
+      buffer[index] |= (1 << bitpos);
+    else
+      buffer[index] &= ~(1 << bitpos);
   }
 }
 
@@ -316,10 +314,11 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
   uint8_t cur_ch = 2;
 
   uint8_t led_phase = 0;
-  uint8_t timestamp = 0;
-  uint32_t collected_data[10] = { 0 };
+  uint16_t timestamp = 0;
+  uint32_t collected_data[15] = { 0 };
 
   uint8_t cur_offset_counter = 0;
+  uint8_t startup_counter = 0;  // Counts up to 15, then stops
 
   while (!adc_updated) { }  // Wait for the first sample
 
@@ -328,13 +327,31 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
     cur_ch = (cur_ch + 1) % 3;
     if (adc_updated) {
       timestamp += 1;   // May overflow and wrap around
-      for (int i = 9; i > 0; i--) collected_data[i] = collected_data[i - 1];
+      if (startup_counter < 15) startup_counter++;
+      for (int i = 14; i > 0; i--) collected_data[i] = collected_data[i - 1];
       collected_data[0] = adc_value;
       adc_updated = 0;
       cur_offset_counter = 0;
     } else {
       cur_offset_counter = (cur_offset_counter + 1) % 5;
     }
+
+    // Payload format:
+    // 10 bits timestamp
+    // 22*5 bits data
+    uint8_t cur_offset =
+      (cur_offset_counter < 3 ? 0 : (cur_offset_counter - 2) * 5);
+    if (startup_counter >= 5 && startup_counter < 15) {
+      // Prevent out-of-bound data
+      if (cur_offset + 5 > startup_counter)
+        cur_offset = startup_counter - 5;
+    }
+    uint8_t tx_payload[15];
+    uint16_t tx_timestamp = (timestamp - cur_offset) & ((1 << 10) - 1);
+    write_bits(tx_payload, 0, 10, tx_timestamp);
+    for (int i = 0; i < 5; i++)
+      write_bits(tx_payload, 10 + i * 22, 22,
+        collected_data[cur_offset + i] >> 2);
 
     uint8_t nRF_cmd_buf[33];
     uint8_t *buf = nRF_cmd_buf + 1;
@@ -361,17 +378,9 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
     buf[p++] = 0x08;  // Type: Shortened Local Name
     buf[p++] = 'R';
     buf[p++] = 'C';
-    // buf[p++] = 16;    // AD length
-    buf[p++] = 5;     // AD length
+    buf[p++] = 16;    // AD length
     buf[p++] = 0xFF;  // Type: Manufacturer Specific Data
-    uint8_t cur_offset =
-      (cur_offset_counter < 3 ? 0 : (cur_offset_counter - 2) * 5);
-    buf[p++] = timestamp - cur_offset;
-    // compress_24b_values(collected_data, 10, buf + p, 14);
-    // p += 14;
-    buf[p++] = (collected_data[cur_offset] >> 16) & 0xff;
-    buf[p++] = (collected_data[cur_offset] >>  8) & 0xff;
-    buf[p++] = (collected_data[cur_offset] >>  0) & 0xff;
+    for (int i = 0; i < 15; i++) buf[p++] = tx_payload[i];
     buf[1] = p - 2;   // Payload length
 
     // Encode packet

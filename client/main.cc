@@ -61,18 +61,28 @@ if (1) {
     if (p.identifier() == "RC") {
       auto mfr_data = p.manufacturer_data();
       for (auto &[x, y] : mfr_data) {
-        // printf("%02x %02x", x & 0xff, (x >> 8) & 0xff);
-        // for (int i = 0; i < y.length(); i++) printf(" %02x", (uint8_t)y[i]);
-        // putchar('\n');
-        uint8_t timestamp = x & 0xff;
-        uint32_t value0 = 
-          ((uint32_t)((x >> 8) & 0xff) << 16) |
-          ((uint32_t)(y[0] & 0xff) << 8) |
-          (y[1] & 0xff);
-        double normalized = (double)((int32_t)(value0 << 8) >> 8) / 0x1000000;
-        double resistance = 4990 * (1.0 / (0.5 + normalized) - 1);
-        fprintf(stderr, "t = %3d: ADC = %06x  R = %11.4lf\n", timestamp, value0, resistance);
-        printf("%d %.12lf\n", (int)timestamp, normalized);
+        uint8_t payload[16];
+        payload[0] = x & 0xff;
+        payload[1] = (x >> 8) & 0xff;
+        for (int i = 0; i < y.length(); i++) payload[i + 2] = (uint8_t)y[i];
+        // for (int i = 0; i < y.length() + 2; i++) printf(" %02x", payload[i]); putchar('\n');
+        auto read_bits = [] (const uint8_t *buffer, size_t start, size_t length) -> uint32_t {
+          uint32_t result = 0;
+          for (int i = length - 1; i >= 0; i--) {
+            int index = (start + i) / 8;
+            int bitpos = (start + i) % 8;
+            result = (result << 1) | ((buffer[index] >> bitpos) & 1);
+          }
+          return result;
+        };
+        uint32_t start_timestamp = read_bits(payload, 0, 10);
+        for (int i = 0; i < 5; i++) {
+          uint32_t timestamp = (start_timestamp - i) & ((1 << 10) - 1);
+          uint32_t value0 = read_bits(payload, 10 + i * 22, 22);
+          double normalized = (double)((int32_t)(value0 << 10) >> 10) / (1 << 22);
+          double resistance = 4990 * (1.0 / (0.5 + normalized) - 1);
+          fprintf(stderr, "t = %4u: ADC = %06x  R = %12.4lf\n", timestamp, value0, resistance);
+        }
       }
     }
   };
