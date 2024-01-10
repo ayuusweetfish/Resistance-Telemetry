@@ -165,6 +165,7 @@ int main()
   HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_SET);
 
   // ======== SPIx ADC ========
+  HAL_Delay(1);
   // ADC_CK
   gpio_init.Pin = PIN_ADC_CK;
   gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
@@ -180,8 +181,14 @@ int main()
 
   HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_RESET);
   HAL_Delay(1);
-  while (HAL_GPIO_ReadPin(GPIOA, PIN_ADC_DA) == GPIO_PIN_SET) { }
-  adc_configure();
+  // Wait for DRDY (not necessary — see below)
+  // while (HAL_GPIO_ReadPin(GPIOA, PIN_ADC_DA) == GPIO_PIN_SET) { }
+  // XXX: Are these unarticulated design aspects inside CS1237?
+  //   Configuration cannot be processed when data conversion is in progress?
+  //   DRDY is still present when data is invalid during the first 3/4 samples?
+  HAL_Delay(320);
+  adc_configure();  // Read data (discarded) and configure
+  HAL_Delay(320);   // Skip 3 samples, otherwise the first few read-outs are zero
 
   // PA12 - EXTI line 12
   HAL_NVIC_SetPriority(EXTI4_15_IRQn, 2, 0);
@@ -385,18 +392,6 @@ static inline uint32_t adc_read()
 
 void EXTI4_15_IRQHandler()
 {
-  /*
-  static uint32_t ticks[20];
-  static int ticks_count = 0;
-  if (ticks_count < 20) {
-    ticks[ticks_count++] = adc_read();
-    ticks[ticks_count++] = HAL_GetTick();
-    if (ticks_count == 20)
-      for (int i = 0; i < 20; i++) {
-        swv_printf("[%02d] = %06x\n", i, ticks[i]);
-      }
-  }
-  */
   adc_value = adc_read();
   __HAL_GPIO_EXTI_CLEAR_FALLING_IT(PIN_ADC_DA);
 }
