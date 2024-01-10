@@ -7,7 +7,7 @@
 #define LED_PORT    GPIOA
 #define LED_PIN_ACT GPIO_PIN_4
 
-// #define RELEASE
+#define RELEASE
 #ifndef RELEASE
 static uint8_t swv_buf[256];
 static size_t swv_buf_ptr = 0;
@@ -59,7 +59,7 @@ TIM_HandleTypeDef tim14;
 
 static inline void sleep_delay(uint32_t ticks) {
   uint32_t start_tick = HAL_GetTick();
-  while (HAL_GetTick() - start_tick < ticks)
+  while (HAL_GetTick() - start_tick < ticks + 1)
     HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
 }
 #define HAL_Delay sleep_delay
@@ -163,6 +163,7 @@ int main()
   RCC_OscInitTypeDef osc_init = { 0 };
   osc_init.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   osc_init.HSIState = RCC_HSI_ON;
+  osc_init.HSIDiv = RCC_HSI_DIV8;
   osc_init.PLL.PLLState = RCC_PLL_OFF;
   HAL_RCC_OscConfig(&osc_init);
 
@@ -171,7 +172,7 @@ int main()
     RCC_CLOCKTYPE_SYSCLK |
     RCC_CLOCKTYPE_HCLK |
     RCC_CLOCKTYPE_PCLK1;
-  clk_init.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  clk_init.SYSCLKSource = RCC_SYSCLKSOURCE_HSI; // SYSCLK = HCLK = 2 MHz
   clk_init.AHBCLKDivider = RCC_SYSCLK_DIV1;
   clk_init.APB1CLKDivider = RCC_HCLK_DIV1;
   HAL_RCC_ClockConfig(&clk_init, FLASH_LATENCY_2);
@@ -283,9 +284,9 @@ int main()
   }
 
   // ======== Timer ========
-  // APB1 = 16 MHz
-  // period = 4 kHz = 4000 cycles
-  // LED Red, TIM14
+  // APB1 = 2 MHz
+  // period = 1 kHz = 2000 cycles
+  // Act LED, TIM14
   gpio_init.Pin = LED_PIN_ACT;
   gpio_init.Mode = GPIO_MODE_AF_PP;
   gpio_init.Alternate = GPIO_AF4_TIM14;
@@ -298,7 +299,7 @@ int main()
     .Init = {
       .Prescaler = 1 - 1,
       .CounterMode = TIM_COUNTERMODE_UP,
-      .Period = 4000 - 1,
+      .Period = 2000 - 1,
       .ClockDivision = TIM_CLOCKDIVISION_DIV1,
       .RepetitionCounter = 0,
     },
@@ -314,10 +315,10 @@ int main()
 /*
 from math import *
 N=256
-print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
+print(', '.join('%d' % round(600*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
 */
   static const uint16_t LED_STEPS[] = {
-300, 315, 330, 346, 362, 378, 394, 411, 428, 446, 463, 481, 499, 518, 536, 555, 574, 592, 611, 630, 650, 669, 688, 707, 726, 745, 764, 783, 801, 820, 838, 856, 874, 892, 909, 926, 943, 959, 975, 991, 1006, 1021, 1035, 1049, 1062, 1075, 1088, 1099, 1110, 1121, 1131, 1140, 1149, 1157, 1164, 1171, 1177, 1182, 1187, 1191, 1194, 1197, 1199, 1200, 1200, 1200, 1199, 1197, 1194, 1191, 1187, 1182, 1177, 1171, 1164, 1157, 1149, 1140, 1131, 1121, 1110, 1099, 1088, 1075, 1062, 1049, 1035, 1021, 1006, 991, 975, 959, 943, 926, 909, 892, 874, 856, 838, 820, 801, 783, 764, 745, 726, 707, 688, 669, 650, 630, 611, 592, 574, 555, 536, 518, 499, 481, 463, 446, 428, 411, 394, 378, 362, 346, 330, 315, 300, 285, 271, 257, 244, 231, 218, 206, 194, 183, 172, 161, 151, 141, 132, 123, 114, 106, 98, 91, 84, 77, 71, 65, 59, 54, 49, 44, 40, 36, 32, 29, 26, 23, 20, 18, 15, 13, 12, 10, 9, 7, 6, 5, 4, 3, 3, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 9, 10, 12, 13, 15, 18, 20, 23, 26, 29, 32, 36, 40, 44, 49, 54, 59, 65, 71, 77, 84, 91, 98, 106, 114, 123, 132, 141, 151, 161, 172, 183, 194, 206, 218, 231, 244, 257, 271, 285
+150, 157, 165, 173, 181, 189, 197, 206, 214, 223, 232, 241, 250, 259, 268, 277, 287, 296, 306, 315, 325, 334, 344, 353, 363, 372, 382, 391, 401, 410, 419, 428, 437, 446, 455, 463, 472, 480, 488, 496, 503, 511, 518, 525, 531, 538, 544, 550, 555, 560, 565, 570, 574, 578, 582, 586, 589, 591, 594, 595, 597, 598, 599, 600, 600, 600, 599, 598, 597, 595, 594, 591, 589, 586, 582, 578, 574, 570, 565, 560, 555, 550, 544, 538, 531, 525, 518, 511, 503, 496, 488, 480, 472, 463, 455, 446, 437, 428, 419, 410, 401, 391, 382, 372, 363, 353, 344, 334, 325, 315, 306, 296, 287, 277, 268, 259, 250, 241, 232, 223, 214, 206, 197, 189, 181, 173, 165, 157, 150, 143, 136, 129, 122, 116, 109, 103, 97, 91, 86, 81, 76, 71, 66, 61, 57, 53, 49, 45, 42, 39, 35, 32, 30, 27, 25, 22, 20, 18, 16, 14, 13, 11, 10, 9, 8, 7, 6, 5, 4, 4, 3, 3, 2, 2, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 16, 18, 20, 22, 25, 27, 30, 32, 35, 39, 42, 45, 49, 53, 57, 61, 66, 71, 76, 81, 86, 91, 97, 103, 109, 116, 122, 129, 136, 143
   };
 
   // ======== On-chip ADC ========
@@ -453,7 +454,7 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
     nRF_cmd_buf[0] = 0xA0;  // W_TX_PAYLOAD
     nRF_send_len(nRF_cmd_buf, p + 4);
     HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_SET);
-    HAL_Delay(5);
+    HAL_Delay(2);
     HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_RESET);
 
     TIM14->CCR1 = LED_STEPS[++led_phase];
@@ -480,7 +481,8 @@ void SysTick_Handler()
 static inline void adc_ser_delay()
 {
   // >= 0.5 us
-  for (volatile int i = 0; i < 16; i++) asm volatile ("nop");
+  // SYSCLK = 2 MHz, 0.5 us is 1 cycle
+  for (volatile int i = 0; i < 2; i++) asm volatile ("nop");
 }
 
 inline void adc_configure()
