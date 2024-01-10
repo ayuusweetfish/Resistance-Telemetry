@@ -7,7 +7,7 @@
 #define LED_PORT    GPIOA
 #define LED_PIN_ACT GPIO_PIN_4
 
-#define RELEASE
+// #define RELEASE
 #ifndef RELEASE
 static uint8_t swv_buf[256];
 static size_t swv_buf_ptr = 0;
@@ -53,6 +53,8 @@ SPI_HandleTypeDef spi1 = { 0 };
 #define PIN_nRF_CE  GPIO_PIN_3
 
 TIM_HandleTypeDef tim14;
+
+ADC_HandleTypeDef adc1 = { 0 };
 
 static inline void nRF_send_len(const uint8_t *cmd, uint32_t size)
 {
@@ -266,7 +268,7 @@ int main()
     // Error? Try a reset
     for (int i = 0; i < 11; i++) {
       HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, i % 2);
-      HAL_Delay(120);
+      HAL_Delay(60);
     }
     HAL_Delay(500);
     NVIC_SystemReset();
@@ -309,6 +311,58 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
   static const uint16_t LED_STEPS[] = {
 300, 315, 330, 346, 362, 378, 394, 411, 428, 446, 463, 481, 499, 518, 536, 555, 574, 592, 611, 630, 650, 669, 688, 707, 726, 745, 764, 783, 801, 820, 838, 856, 874, 892, 909, 926, 943, 959, 975, 991, 1006, 1021, 1035, 1049, 1062, 1075, 1088, 1099, 1110, 1121, 1131, 1140, 1149, 1157, 1164, 1171, 1177, 1182, 1187, 1191, 1194, 1197, 1199, 1200, 1200, 1200, 1199, 1197, 1194, 1191, 1187, 1182, 1177, 1171, 1164, 1157, 1149, 1140, 1131, 1121, 1110, 1099, 1088, 1075, 1062, 1049, 1035, 1021, 1006, 991, 975, 959, 943, 926, 909, 892, 874, 856, 838, 820, 801, 783, 764, 745, 726, 707, 688, 669, 650, 630, 611, 592, 574, 555, 536, 518, 499, 481, 463, 446, 428, 411, 394, 378, 362, 346, 330, 315, 300, 285, 271, 257, 244, 231, 218, 206, 194, 183, 172, 161, 151, 141, 132, 123, 114, 106, 98, 91, 84, 77, 71, 65, 59, 54, 49, 44, 40, 36, 32, 29, 26, 23, 20, 18, 15, 13, 12, 10, 9, 7, 6, 5, 4, 3, 3, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 9, 10, 12, 13, 15, 18, 20, 23, 26, 29, 32, 36, 40, 44, 49, 54, 59, 65, 71, 77, 84, 91, 98, 106, 114, 123, 132, 141, 151, 161, 172, 183, 194, 206, 218, 231, 244, 257, 271, 285
   };
+
+  // ======== On-chip ADC ========
+  gpio_init.Pin = GPIO_PIN_0;
+  gpio_init.Mode = GPIO_MODE_ANALOG;
+  gpio_init.Pull = GPIO_NOPULL;
+  gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(GPIOA, &gpio_init);
+
+  __HAL_RCC_ADC_CLK_ENABLE();
+  adc1.Instance = ADC1;
+  adc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
+  adc1.Init.Resolution = ADC_RESOLUTION_12B;
+  adc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  adc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  adc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  adc1.Init.LowPowerAutoWait = DISABLE;
+  adc1.Init.LowPowerAutoPowerOff = ENABLE;
+  adc1.Init.ContinuousConvMode = DISABLE;
+  adc1.Init.NbrOfConversion = 1;
+  adc1.Init.DiscontinuousConvMode = DISABLE;
+  adc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  adc1.Init.TriggerFrequencyMode = ADC_TRIGGER_FREQ_LOW;
+  HAL_ADC_Init(&adc1);
+
+  ADC_ChannelConfTypeDef adc_ch13;
+  adc_ch13.Channel = ADC_CHANNEL_VREFINT;
+  adc_ch13.Rank = ADC_REGULAR_RANK_1;
+  adc_ch13.SamplingTime = ADC_SAMPLETIME_79CYCLES_5; // Stablize
+  HAL_ADC_ConfigChannel(&adc1, &adc_ch13);
+
+  HAL_ADCEx_Calibration_Start(&adc1);
+
+  HAL_ADC_Start(&adc1);
+  HAL_ADC_PollForConversion(&adc1, 1000);
+  uint32_t adc_value = HAL_ADC_GetValue(&adc1);
+  HAL_ADC_Stop(&adc1);
+  uint32_t vdd_mV = 3000 * *VREFINT_CAL_ADDR / adc_value;
+  swv_printf("ADC ref = %lu\n", *VREFINT_CAL_ADDR);
+  swv_printf("ADC value = %lu, VDD = %lu mV\n", adc_value, vdd_mV);
+  if (vdd_mV < 3100) {
+    // Blinks: wait + 2 short + (1 long per 100 mV drop)
+    HAL_Delay(200);
+    for (int i = 0; i < 2; i++) {
+      TIM14->CCR1 = 4000; HAL_Delay(60);
+      TIM14->CCR1 = 0; HAL_Delay(60);
+    }
+    int blinks = (3100 - vdd_mV) / 100 + 1;
+    for (int i = 0; i < blinks; i++) {
+      TIM14->CCR1 = 4000; HAL_Delay(120);
+      TIM14->CCR1 = 0; HAL_Delay(120);
+    }
+  }
 
   uint8_t nrf_ch[3] = { 2, 26, 80};
   uint8_t ble_ch[3] = {37, 38, 39};
