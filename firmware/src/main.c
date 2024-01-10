@@ -125,6 +125,7 @@ void compress_24b_values(uint32_t *values, size_t count, uint8_t *buffer, size_t
 }
 
 static volatile uint32_t adc_value = 0;
+static volatile uint8_t adc_updated = 0;
 
 int main()
 {
@@ -312,16 +313,28 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
 
   uint8_t nrf_ch[3] = { 2, 26, 80};
   uint8_t ble_ch[3] = {37, 38, 39};
-  uint8_t cur_ch = 0;
+  uint8_t cur_ch = 2;
 
+  uint8_t led_phase = 0;
   uint8_t timestamp = 0;
   uint32_t collected_data[10] = { 0 };
 
+  uint8_t cur_offset_counter = 0;
+
+  while (!adc_updated) { }  // Wait for the first sample
+
+  uint32_t last_tick = HAL_GetTick();
   while (true) {
-    timestamp += 1;   // May overflow and wrap around
-    for (int i = 9; i > 0; i--) collected_data[i] = collected_data[i - 1];
-    // collected_data[0] = (uint32_t)timestamp * timestamp * 5;
-    collected_data[0] = adc_value;
+    cur_ch = (cur_ch + 1) % 3;
+    if (adc_updated) {
+      timestamp += 1;   // May overflow and wrap around
+      for (int i = 9; i > 0; i--) collected_data[i] = collected_data[i - 1];
+      collected_data[0] = adc_value;
+      adc_updated = 0;
+      cur_offset_counter = 0;
+    } else {
+      cur_offset_counter = (cur_offset_counter + 1) % 5;
+    }
 
     uint8_t nRF_cmd_buf[33];
     uint8_t *buf = nRF_cmd_buf + 1;
@@ -339,26 +352,29 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
     buf[p++] = 0xEE;
     buf[p++] = 0xDF;
     buf[p++] = 0xC0;
+  /*
     buf[p++] = 2;     // AD length
     buf[p++] = 0x01;  // Type: Flags
     buf[p++] = 0x05;
+  */
     buf[p++] = 3;     // AD length
     buf[p++] = 0x08;  // Type: Shortened Local Name
     buf[p++] = 'R';
     buf[p++] = 'C';
-    // buf[p++] = 13;    // AD length
+    // buf[p++] = 16;    // AD length
     buf[p++] = 5;     // AD length
     buf[p++] = 0xFF;  // Type: Manufacturer Specific Data
-    buf[p++] = timestamp;
-    // compress_24b_values(collected_data, 10, buf + p, 11);
-    // p += 11;
-    buf[p++] = (collected_data[0] >> 16) & 0xff;
-    buf[p++] = (collected_data[0] >>  8) & 0xff;
-    buf[p++] = (collected_data[0] >>  0) & 0xff;
+    uint8_t cur_offset =
+      (cur_offset_counter < 3 ? 0 : (cur_offset_counter - 2) * 5);
+    buf[p++] = timestamp - cur_offset;
+    // compress_24b_values(collected_data, 10, buf + p, 14);
+    // p += 14;
+    buf[p++] = (collected_data[cur_offset] >> 16) & 0xff;
+    buf[p++] = (collected_data[cur_offset] >>  8) & 0xff;
+    buf[p++] = (collected_data[cur_offset] >>  0) & 0xff;
     buf[1] = p - 2;   // Payload length
 
     // Encode packet
-    cur_ch = (cur_ch + 1) % 3;
     ble_encode_packet(buf, p, ble_ch[cur_ch]);
 
     nRF_send(0x25, nrf_ch[cur_ch]); // RF_CH: Set channel
@@ -368,11 +384,19 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
     nRF_cmd_buf[0] = 0xA0;  // W_TX_PAYLOAD
     nRF_send_len(nRF_cmd_buf, p + 4);
     HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_SET);
-    HAL_Delay(20);
+    HAL_Delay(5);
     HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_RESET);
-    TIM14->CCR1 = LED_STEPS[timestamp];
 
+    TIM14->CCR1 = LED_STEPS[++led_phase];
     swv_printf("ADC value = %06x\n", collected_data[0]);
+
+    uint32_t cur_tick = HAL_GetTick();
+    if (cur_tick - last_tick >= 18) {
+      last_tick = cur_tick;
+    } else {
+      while (HAL_GetTick() - last_tick < 18) { }
+      last_tick += 18;
+    }
   }
 }
 
@@ -444,5 +468,6 @@ static inline uint32_t adc_read()
 void EXTI4_15_IRQHandler()
 {
   adc_value = adc_read();
+  adc_updated = 1;
   __HAL_GPIO_EXTI_CLEAR_FALLING_IT(PIN_ADC_DA);
 }
