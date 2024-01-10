@@ -25,18 +25,39 @@ var trace1 = {
 };
 Plotly.newPlot('plot', [trace1], null, {scrollZoom: true, responsive: true, displayModeBar: true});
 
+let maxLabel = -1
+let fetchInProgress = false
 setInterval(() => {
-  const since = (labels.length === 0 ? 0 : labels[labels.length - 1])
+  if (fetchInProgress) return
+  // Find mex from max - 20
+  let mex = Math.max(0, maxLabel - 20)
+  for (; mex <= maxLabel; mex++)
+    if (labels.indexOf(mex) === -1) break
+  const since = mex
+  fetchInProgress = true
   fetch('/data?since=' + since).then((resp) => {
     if (resp.ok) {
       resp.text().then((text) => {
+        fetchInProgress = false
+        if (text.trim().length === 0) return
         const values = text.split(' ')
         for (let i = 0; i < values.length; i += 2) {
-          labels.push(+values[i])
-          data.push(+values[i + 1])
+          const label = +values[i]
+          // Find a place for insertion
+          let insertPos = labels.length
+          while (insertPos > 0 && labels[insertPos - 1] > label) insertPos -= 1
+          if (insertPos > 0 && labels[insertPos - 1] === label) continue
+          labels.splice(insertPos, 0, label)
+          data.splice(insertPos, 0, +values[i + 1])
+          maxLabel = Math.max(maxLabel, label)
+          console.log(label, labels)
         }
+        for (let i = 0; i < labels.length - 1; i++)
+          if (labels[i] >= labels[i + 1]) alert('!')
         Plotly.redraw('plot')
       })
+    } else {
+      fetchInProgress = false
     }
   })
 }, 200)

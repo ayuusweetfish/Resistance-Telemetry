@@ -13,6 +13,7 @@
 
 #include <algorithm>  // std::upper_bound
 #include <deque>
+#include <iomanip>    // std::setprecision
 #include <mutex>
 #include <sstream>    // std::ostringstream
 #include <utility>    // std::pair
@@ -29,7 +30,7 @@ unsigned char index_html[4000000];
 unsigned int index_html_len;
 #endif
 
-std::deque<std::pair<int, int>> readings;
+std::deque<std::pair<int, double>> readings;
 std::mutex readings_mutex;
 
 int main() {
@@ -44,7 +45,6 @@ int main() {
   }
 #endif
 
-if (1) {
   if (!SimpleBLE::Adapter::bluetooth_enabled()) {
     printf("Bluetooth not enabled\n");
     return 1;
@@ -60,6 +60,7 @@ if (1) {
   auto upd_print = [] (SimpleBLE::Peripheral p) {
     if (p.identifier() == "RT") {
       auto mfr_data = p.manufacturer_data();
+      readings_mutex.lock();
       for (auto &[x, y] : mfr_data) {
         uint8_t payload[16];
         payload[0] = x & 0xff;
@@ -76,14 +77,22 @@ if (1) {
           return result;
         };
         uint32_t start_timestamp = read_bits(payload, 0, 10);
-        for (int i = 0; i < 5; i++) {
+        for (int i = 5 - 1; i >= 0; i--) {
           uint32_t timestamp = (start_timestamp - i) & ((1 << 10) - 1);
+          if (timestamp >= 1000) continue;
+          int real_timestamp = timestamp - 1;
           uint32_t value0 = read_bits(payload, 10 + i * 22, 22);
           double normalized = (double)((int32_t)(value0 << 10) >> 10) / (1 << 22);
           double resistance = 4990 * (1.0 / (0.5 + normalized) - 1);
           fprintf(stderr, "t = %4u: ADC = %06x  R = %12.4lf\n", timestamp, value0, resistance);
+          auto insert_pos = std::lower_bound(
+            readings.begin(), readings.end(),
+            std::make_pair(real_timestamp, -1.0));
+          if (insert_pos == readings.end() || insert_pos->first != real_timestamp)
+            readings.insert(insert_pos, {real_timestamp, resistance});
         }
       }
+      readings_mutex.unlock();
     }
   };
   adapter.set_callback_on_scan_found(upd_print);
@@ -91,8 +100,6 @@ if (1) {
 
   printf("Starting scan\n");
   adapter.scan_start();
-  while (1) sleep(1);
-}
 
   auto request_handler = [] (
     void *cls,
@@ -135,15 +142,16 @@ if (1) {
       }
       // Read the values
       readings_mutex.lock();
-      auto itr = std::upper_bound(readings.begin(), readings.end(),
-        std::make_pair(since, INT_MAX));
-      std::vector<std::pair<int, int>> returned_values(itr, readings.end());
+      auto itr = std::lower_bound(readings.begin(), readings.end(),
+        std::make_pair(since, std::numeric_limits<double>::min()));
+      std::vector<std::pair<int, double>> returned_values(itr, readings.end());
       readings_mutex.unlock();
       // Convert to space-separated string
       std::ostringstream ss;
       for (auto entry : returned_values) {
         if (ss.tellp() != 0) ss << ' ';
-        ss << entry.first << ' ' << entry.second;
+        ss << entry.first << ' '
+           << std::fixed << std::setprecision(12) << entry.second;
       }
       struct MHD_Response *resp = MHD_create_response_from_buffer(
         ss.tellp(), (void *)ss.str().c_str(),
@@ -169,6 +177,7 @@ if (1) {
   );
   printf("http://localhost:24017/\n");
 
+/*
   int x = 0;
   while (1) {
     x++;
@@ -177,6 +186,8 @@ if (1) {
     readings_mutex.unlock();
     usleep(200000);
   }
+*/
+  while (1) sleep(1);
   MHD_stop_daemon(daemon);
 
   return 0;
