@@ -58,7 +58,7 @@ if (1) {
   auto adapter = adapters[0];
 
   auto upd_print = [] (SimpleBLE::Peripheral p) {
-    if (p.identifier() == "RC") {
+    if (p.identifier() == "RT") {
       auto mfr_data = p.manufacturer_data();
       for (auto &[x, y] : mfr_data) {
         uint8_t payload[16];

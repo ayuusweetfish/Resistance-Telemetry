@@ -7,6 +7,7 @@
 #define LED_PORT    GPIOA
 #define LED_PIN_ACT GPIO_PIN_4
 
+#define RELEASE
 #ifndef RELEASE
 static uint8_t swv_buf[256];
 static size_t swv_buf_ptr = 0;
@@ -363,12 +364,12 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
     buf[p++] = 0x42;  // Type: ADV_NONCONN_IND; TxAdd is random
     buf[p++] = 0;     // Payload length, to be filled
     // PDU payload
-    buf[p++] = 0xAA;  // Address
-    buf[p++] = 0xBB;
-    buf[p++] = 0xCC;
-    buf[p++] = 0xEE;
-    buf[p++] = 0xDF;
-    buf[p++] = 0xC0;
+    buf[p++] = 0x48;  // Address (byte reversed)
+    buf[p++] = 0xFE;
+    buf[p++] = 0x21;
+    buf[p++] = 0x61;
+    buf[p++] = 0x75;
+    buf[p++] = 0xCB;  // Highest bit should be set
   /*
     buf[p++] = 2;     // AD length
     buf[p++] = 0x01;  // Type: Flags
@@ -377,7 +378,7 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
     buf[p++] = 3;     // AD length
     buf[p++] = 0x08;  // Type: Shortened Local Name
     buf[p++] = 'R';
-    buf[p++] = 'C';
+    buf[p++] = 'T';
     buf[p++] = 16;    // AD length
     buf[p++] = 0xFF;  // Type: Manufacturer Specific Data
     for (int i = 0; i < 15; i++) buf[p++] = tx_payload[i];
