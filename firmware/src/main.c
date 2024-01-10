@@ -54,7 +54,15 @@ SPI_HandleTypeDef spi1 = { 0 };
 
 TIM_HandleTypeDef tim14;
 
-ADC_HandleTypeDef adc1 = { 0 };
+// Disabled; see notes in main()
+// ADC_HandleTypeDef adc1 = { 0 };
+
+static inline void sleep_delay(uint32_t ticks) {
+  uint32_t start_tick = HAL_GetTick();
+  while (HAL_GetTick() - start_tick < ticks)
+    HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
+}
+#define HAL_Delay sleep_delay
 
 static inline void nRF_send_len(const uint8_t *cmd, uint32_t size)
 {
@@ -313,12 +321,8 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
   };
 
   // ======== On-chip ADC ========
-  gpio_init.Pin = GPIO_PIN_0;
-  gpio_init.Mode = GPIO_MODE_ANALOG;
-  gpio_init.Pull = GPIO_NOPULL;
-  gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
-  HAL_GPIO_Init(GPIOA, &gpio_init);
-
+  // Disabled; HAL_ADC_GetValue() disturbs timing of CS1237?
+/*
   __HAL_RCC_ADC_CLK_ENABLE();
   adc1.Instance = ADC1;
   adc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
@@ -335,11 +339,11 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
   adc1.Init.TriggerFrequencyMode = ADC_TRIGGER_FREQ_LOW;
   HAL_ADC_Init(&adc1);
 
-  ADC_ChannelConfTypeDef adc_ch13;
-  adc_ch13.Channel = ADC_CHANNEL_VREFINT;
-  adc_ch13.Rank = ADC_REGULAR_RANK_1;
-  adc_ch13.SamplingTime = ADC_SAMPLETIME_79CYCLES_5; // Stablize
-  HAL_ADC_ConfigChannel(&adc1, &adc_ch13);
+  ADC_ChannelConfTypeDef adc_ch;
+  adc_ch.Channel = ADC_CHANNEL_VREFINT;
+  adc_ch.Rank = ADC_REGULAR_RANK_1;
+  adc_ch.SamplingTime = ADC_SAMPLETIME_79CYCLES_5; // Stablize
+  HAL_ADC_ConfigChannel(&adc1, &adc_ch);
 
   HAL_ADCEx_Calibration_Start(&adc1);
 
@@ -363,6 +367,7 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
       TIM14->CCR1 = 0; HAL_Delay(120);
     }
   }
+*/
 
   uint8_t nrf_ch[3] = { 2, 26, 80};
   uint8_t ble_ch[3] = {37, 38, 39};
@@ -454,11 +459,13 @@ print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
     TIM14->CCR1 = LED_STEPS[++led_phase];
     swv_printf("ADC value = %06x\n", collected_data[0]);
 
+    // Accurate delay
     uint32_t cur_tick = HAL_GetTick();
     if (cur_tick - last_tick >= 18) {
       last_tick = cur_tick;
     } else {
-      while (HAL_GetTick() - last_tick < 18) { }
+      while (HAL_GetTick() - last_tick < 18)
+        HAL_PWR_EnterSLEEPMode(PWR_MAINREGULATOR_ON, PWR_SLEEPENTRY_WFI);
       last_tick += 18;
     }
   }
