@@ -51,6 +51,8 @@ SPI_HandleTypeDef spi1 = { 0 };
 #define PIN_nRF_CS  GPIO_PIN_0
 #define PIN_nRF_CE  GPIO_PIN_3
 
+TIM_HandleTypeDef tim14;
+
 static inline void nRF_send_len(const uint8_t *cmd, uint32_t size)
 {
   HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_RESET);
@@ -270,6 +272,44 @@ int main()
     NVIC_SystemReset();
   }
 
+  // ======== Timer ========
+  // APB1 = 16 MHz
+  // period = 4 kHz = 4000 cycles
+  // LED Red, TIM14
+  gpio_init.Pin = LED_PIN_ACT;
+  gpio_init.Mode = GPIO_MODE_AF_PP;
+  gpio_init.Alternate = GPIO_AF4_TIM14;
+  gpio_init.Pull = GPIO_NOPULL;
+  gpio_init.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(LED_PORT, &gpio_init);
+  __HAL_RCC_TIM14_CLK_ENABLE();
+  tim14 = (TIM_HandleTypeDef){
+    .Instance = TIM14,
+    .Init = {
+      .Prescaler = 1 - 1,
+      .CounterMode = TIM_COUNTERMODE_UP,
+      .Period = 4000 - 1,
+      .ClockDivision = TIM_CLOCKDIVISION_DIV1,
+      .RepetitionCounter = 0,
+    },
+  };
+  HAL_TIM_PWM_Init(&tim14);
+  TIM_OC_InitTypeDef tim14_ch1_oc_init = {
+    .OCMode = TIM_OCMODE_PWM1,
+    .Pulse = 0, // to be filled
+    .OCPolarity = TIM_OCPOLARITY_HIGH,
+  };
+  HAL_TIM_PWM_ConfigChannel(&tim14, &tim14_ch1_oc_init, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&tim14, TIM_CHANNEL_1);
+/*
+from math import *
+N=256
+print(', '.join('%d' % round(1200*((1+sin(i/N*2*pi))/2)**2) for i in range(N)))
+*/
+  static const uint16_t LED_STEPS[] = {
+300, 315, 330, 346, 362, 378, 394, 411, 428, 446, 463, 481, 499, 518, 536, 555, 574, 592, 611, 630, 650, 669, 688, 707, 726, 745, 764, 783, 801, 820, 838, 856, 874, 892, 909, 926, 943, 959, 975, 991, 1006, 1021, 1035, 1049, 1062, 1075, 1088, 1099, 1110, 1121, 1131, 1140, 1149, 1157, 1164, 1171, 1177, 1182, 1187, 1191, 1194, 1197, 1199, 1200, 1200, 1200, 1199, 1197, 1194, 1191, 1187, 1182, 1177, 1171, 1164, 1157, 1149, 1140, 1131, 1121, 1110, 1099, 1088, 1075, 1062, 1049, 1035, 1021, 1006, 991, 975, 959, 943, 926, 909, 892, 874, 856, 838, 820, 801, 783, 764, 745, 726, 707, 688, 669, 650, 630, 611, 592, 574, 555, 536, 518, 499, 481, 463, 446, 428, 411, 394, 378, 362, 346, 330, 315, 300, 285, 271, 257, 244, 231, 218, 206, 194, 183, 172, 161, 151, 141, 132, 123, 114, 106, 98, 91, 84, 77, 71, 65, 59, 54, 49, 44, 40, 36, 32, 29, 26, 23, 20, 18, 15, 13, 12, 10, 9, 7, 6, 5, 4, 3, 3, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 9, 10, 12, 13, 15, 18, 20, 23, 26, 29, 32, 36, 40, 44, 49, 54, 59, 65, 71, 77, 84, 91, 98, 106, 114, 123, 132, 141, 151, 161, 172, 183, 194, 206, 218, 231, 244, 257, 271, 285
+  };
+
   uint8_t nrf_ch[3] = { 2, 26, 80};
   uint8_t ble_ch[3] = {37, 38, 39};
   uint8_t cur_ch = 0;
@@ -328,10 +368,9 @@ int main()
     nRF_cmd_buf[0] = 0xA0;  // W_TX_PAYLOAD
     nRF_send_len(nRF_cmd_buf, p + 4);
     HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_SET);
-    if (timestamp % 64 == 0) HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_SET);
     HAL_Delay(20);
     HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_RESET);
-    if (timestamp % 64 == 0) HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_RESET);
+    TIM14->CCR1 = LED_STEPS[timestamp];
 
     swv_printf("ADC value = %06x\n", collected_data[0]);
   }
