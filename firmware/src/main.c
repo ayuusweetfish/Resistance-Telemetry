@@ -7,6 +7,7 @@
 #define LED_PORT    GPIOA
 #define LED_PIN_ACT GPIO_PIN_4
 
+#ifndef RELEASE
 static uint8_t swv_buf[256];
 static size_t swv_buf_ptr = 0;
 __attribute__ ((noinline, used))
@@ -38,6 +39,9 @@ static void swv_printf(const char *restrict fmt, ...)
     swv_putchar('\n');
   }
 }
+#else
+#define swv_printf(...)
+#endif
 
 #define PIN_ADC_CK  GPIO_PIN_11
 #define PIN_ADC_DA  GPIO_PIN_12
@@ -186,9 +190,15 @@ int main()
   // XXX: Are these unarticulated design aspects inside CS1237?
   //   Configuration cannot be processed when data conversion is in progress?
   //   DRDY is still present when data is invalid during the first 3/4 samples?
-  HAL_Delay(320);
+  // Anyway, blink the LED while we wait
+  HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_SET);
+  HAL_Delay(160);
+  HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_RESET);
+  HAL_Delay(160);
   adc_configure();  // Read data (discarded) and configure
+  HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_SET);
   HAL_Delay(320);   // Skip 3 samples, otherwise the first few read-outs are zero
+  HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_RESET);
 
   // PA12 - EXTI line 12
   HAL_NVIC_SetPriority(EXTI4_15_IRQn, 2, 0);
@@ -236,9 +246,9 @@ int main()
   nRF_send(0x24, 0x00); // SETUP_RETR: Disable auto restransmission
   nRF_send(0x26, 0x06); // RF_SETUP: 1 Mbps, 0 dBm
   nRF_send(0x27, 0x70); // STATUS: Clear status flags
-  nRF_send(0x31, 32);   // RX_PW_P0: Pipe 0 payload length 32 bytes
+  // nRF_send(0x31, 32);   // RX_PW_P0: Pipe 0 payload length 32 bytes
   nRF_send(0x22, 0x01); // EN_RXADDR: Enable RX on pipe 0
-  nRF_send(0x2A, bit_rev(0x8E), bit_rev(0x89), bit_rev(0xBE), bit_rev(0xD6));
+  // nRF_send(0x2A, bit_rev(0x8E), bit_rev(0x89), bit_rev(0xBE), bit_rev(0xD6));
     // RX_ADDR_P0: Set pipe 0 receive address
   nRF_send(0x30, bit_rev(0x8E), bit_rev(0x89), bit_rev(0xBE), bit_rev(0xD6));
     // TX_ADDR: Set transmit address
@@ -250,7 +260,15 @@ int main()
   HAL_SPI_TransmitReceive(&spi1, spi_tx, spi_rx, 2, 1000);
   HAL_GPIO_WritePin(GPIOA, PIN_nRF_CS, GPIO_PIN_SET);
   swv_printf("received data = %02x %02x\n", spi_rx[0], spi_rx[1]);
-  // 0e 06
+  if (spi_rx[0] != 0x0E || spi_rx[1] != 0x06) {
+    // Error? Try a reset
+    for (int i = 0; i < 11; i++) {
+      HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, i % 2);
+      HAL_Delay(120);
+    }
+    HAL_Delay(500);
+    NVIC_SystemReset();
+  }
 
   uint8_t nrf_ch[3] = { 2, 26, 80};
   uint8_t ble_ch[3] = {37, 38, 39};
@@ -310,17 +328,12 @@ int main()
     nRF_cmd_buf[0] = 0xA0;  // W_TX_PAYLOAD
     nRF_send_len(nRF_cmd_buf, p + 4);
     HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_SET);
+    if (timestamp % 64 == 0) HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_SET);
     HAL_Delay(20);
     HAL_GPIO_WritePin(GPIOA, PIN_nRF_CE, GPIO_PIN_RESET);
+    if (timestamp % 64 == 0) HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_RESET);
 
     swv_printf("ADC value = %06x\n", collected_data[0]);
-  }
-
-  while (true) {
-    HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_RESET);
-    HAL_Delay(200);
-    HAL_GPIO_WritePin(LED_PORT, LED_PIN_ACT, GPIO_PIN_SET);
-    HAL_Delay(200);
   }
 }
 
@@ -356,9 +369,8 @@ inline void adc_configure()
   HAL_GPIO_Init(GPIOA, &gpio_init);
   // SPEED_SEL = 0b00: 10 Hz
   // PGA_SEL = 00: PGA gain = 1
-  // Example: input 6.8k -- 0xa73900 = -5818112 = -0.3467865 FS
-  // -0.3468 = -0.35 + 0.9% = 1.2/(1.2+6.8) - 0.5
-  // Calculated R = 1.2 kΩ * (1 / (0.5 + ADC value / (2^24)) - 1)
+  // ADC value normalized to [-0.5, +0.5)
+  // Calculated R = R5 (see hardware design) * (1 / (0.5 + ADC value / (2^24)) - 1)
   uint8_t writes[2] = {0x65 << 1, 0b00000000};
   for (int i = 0; i < 16; i++) {
     HAL_GPIO_WritePin(GPIOA, PIN_ADC_CK, GPIO_PIN_SET);

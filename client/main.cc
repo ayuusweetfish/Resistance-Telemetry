@@ -44,7 +44,7 @@ int main() {
   }
 #endif
 
-if (0) {
+if (1) {
   if (!SimpleBLE::Adapter::bluetooth_enabled()) {
     printf("Bluetooth not enabled\n");
     return 1;
@@ -70,7 +70,7 @@ if (0) {
           ((uint32_t)(y[0] & 0xff) << 8) |
           (y[1] & 0xff);
         double normalized = (double)((int32_t)(value0 << 8) >> 8) / 0x1000000;
-        double resistance = 1210 * (1.0 / (0.5 + normalized) - 1);
+        double resistance = 4990 * (1.0 / (0.5 + normalized) - 1);
         fprintf(stderr, "t = %3d: ADC = %06x  R = %11.4lf\n", timestamp, value0, resistance);
         printf("%d %.12lf\n", (int)timestamp, normalized);
       }
@@ -81,6 +81,7 @@ if (0) {
 
   printf("Starting scan\n");
   adapter.scan_start();
+  while (1) sleep(1);
 }
 
   auto request_handler = [] (
