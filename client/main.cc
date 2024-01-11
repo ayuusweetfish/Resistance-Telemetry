@@ -230,6 +230,14 @@ int main() {
   );
   printf("http://localhost:24017/\n");
 
+#if defined(WIN32) || defined(_WIN32)
+  system("start http://localhost:24017/");
+#elif __linux__
+  system("xdg-open http://localhost:24017/");
+#elif __APPLE__
+  system("open http://localhost:24017/");
+#endif
+
   auto rand = [] () -> uint32_t {
     static uint32_t seed = 240111;
     return (seed = (seed * 1103515245 + 12345) & 0x7fffffff);
