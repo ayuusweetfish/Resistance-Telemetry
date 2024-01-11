@@ -367,6 +367,25 @@ void compress_24b_values(uint32_t *values, size_t count, uint8_t *buffer, size_t
     float coeff[3];
     mat_mul(3, n, 1, coeff, VSiUt, values_f);
     mat_print(1, 3, coeff);
+/*
+n = 4:
+1/70
+62,18,-6,-10,6      + 10 x2 − 74 x + 126
+-54,13,40,27,-26    − 20 x2 + 127 x − 161
+10,-5,-10,-5,10     + 5 x2 − 30 x + 35
+
+n = 5:
+1/280
+230,90,0,-40,-30,30   + 25 x2 − 215 x + 420
+-165,1,92,108,49,-85  − 75/2 x2 + 557/2 x − 406
+25,-5,-20,-20,-5,25   + 15/2 x2 − 105/2 x + 70
+
+n = 6:
+1/84
+64,30,6,-8,-12,-6,10    + 5 x2 − 49 x + 108
+-39,-6,15,24,21,6,-21   − 6 x2 + 51 x − 84
+5,0,-3,-4,-3,0,5        + 1 x2 − 8 x + 12
+*/
 
     float predicted = (coeff[2] * n + coeff[1]) * n + coeff[0];
     if (predicted >= (1 << 23)) predicted = (1 << 23) - 1;

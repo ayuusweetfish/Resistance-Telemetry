@@ -1,4 +1,12 @@
+# SimpleBLE
+
 cmake SimpleBLE/simpleble -B build_simpleble
 (cd build_simpleble; make -j4)
 
 Built binaries are at build_simpleble/lib
+
+# libmicrohttpd
+
+(cd libmicrohttpd-0.9.77; ./configure; make -j4)
+
+Built binaries are at libmicrohttpd-0.9.77/src/microhttpd/.libs
