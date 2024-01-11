@@ -33,6 +33,7 @@ unsigned int index_html_len;
 std::deque<std::pair<int, double>> readings;
 std::mutex readings_mutex;
 int timestamp_base = 0;
+bool is_paused = false;
 
 int main() {
 #if !USE_BUILTIN_INDEX_HTML
@@ -60,6 +61,8 @@ int main() {
 
   // Add a value to the data. This requires `readings_mutex` to be held.
   auto add_value = [] (uint32_t timestamp, uint32_t raw_adc) -> void {
+    if (is_paused) return;
+
     // Calculate the real timestamp
     int real_timestamp = (int)timestamp + timestamp_base;
     int max_timestamp = (readings.empty() ? 0 : readings.back().first);
@@ -144,14 +147,7 @@ int main() {
   -> enum MHD_Result {
     enum MHD_Result result;
 
-    if (strcmp(method, "GET") != 0) {
-      struct MHD_Response *resp = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_PERSISTENT);
-      result = MHD_queue_response(conn, MHD_HTTP_METHOD_NOT_ALLOWED /* 405 */, resp);
-      MHD_destroy_response(resp);
-      return result;
-    }
-
-    if (strcmp(url, "/") == 0) {
+    if (strcmp(method, "GET") == 0 && strcmp(url, "/") == 0) {
       struct MHD_Response *resp = MHD_create_response_from_buffer(
         index_html_len, (void *)index_html,
         MHD_RESPMEM_PERSISTENT);
@@ -161,7 +157,7 @@ int main() {
       return result;
     }
 
-    if (strcmp(url, "/data") == 0) {
+    if (strcmp(method, "GET") == 0 && strcmp(url, "/data") == 0) {
       const char *since_str = MHD_lookup_connection_value(conn, MHD_GET_ARGUMENT_KIND, "since");
       int since;
       errno = 0;
@@ -193,6 +189,31 @@ int main() {
       return result;
     }
 
+    if (strcmp(method, "POST") == 0 && strcmp(url, "/clear") == 0) {
+      readings_mutex.lock();
+      readings.clear();
+      timestamp_base = 0;
+      fputs("Cleared\n", stderr);
+      readings_mutex.unlock();
+      struct MHD_Response *resp = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_PERSISTENT);
+      result = MHD_queue_response(conn, MHD_HTTP_OK /* 200 */, resp);
+      MHD_destroy_response(resp);
+      return result;
+    }
+
+    if (strcmp(method, "POST") == 0 &&
+        (strcmp(url, "/pause") == 0 || strcmp(url, "/resume") == 0)) {
+      readings_mutex.lock();
+      is_paused = (strcmp(url, "/pause") == 0);
+      if (is_paused) timestamp_base = -5000;  // Force a reset at resume
+      fputs(is_paused ? "Paused\n" : "Resumed\n", stderr);
+      readings_mutex.unlock();
+      struct MHD_Response *resp = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_PERSISTENT);
+      result = MHD_queue_response(conn, MHD_HTTP_OK /* 200 */, resp);
+      MHD_destroy_response(resp);
+      return result;
+    }
+
     struct MHD_Response *resp = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_PERSISTENT);
     result = MHD_queue_response(conn, MHD_HTTP_NOT_FOUND /* 404 */, resp);
     MHD_destroy_response(resp);
@@ -218,10 +239,10 @@ int main() {
     if ((rand() >> 4) % 2 != 0) {
       if (rand() % 41 == 0) x = (rand() >> 7) & 1023;
       if ((rand() >> 4) % 2 == 0) {
-        add_value((x - 4) & 1023, 0x400000 - 500);
-        add_value((x - 3) & 1023, 0x400000 - 500);
+        add_value((x - 4) & 1023, 0x400000 - 2000 + rand() % 997);
+        add_value((x - 3) & 1023, 0x400000 - 2000 + rand() % 997);
       }
-      add_value(x & 1023, 400);
+      add_value(x & 1023, 2000 + rand() % 997);
     }
     usleep(200000);
   }

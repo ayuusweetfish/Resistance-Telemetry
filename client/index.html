@@ -16,19 +16,57 @@
 </script><script>
 const labels = []
 const data = []
-var trace1 = {
+let maxLabel = -1
+let fetchInProgress = false
+let clearDataInProgress = false
+let isPaused = false
+
+fetch('/resume', { method: 'POST' })
+
+const clearData = () => {
+  labels.splice(0)
+  data.splice(0)
+  maxLabel = -1
+  clearDataInProgress = true
+  fetch('/clear', { method: 'POST' }).then((resp) => {
+    clearDataInProgress = false
+  })
+}
+
+const trace1 = {
   x: labels,
   y: data,
   type: 'scattergl',
   mode: 'lines',
   line: {shape: 'spline'},
-};
-Plotly.newPlot('plot', [trace1], null, {scrollZoom: true, responsive: true, displayModeBar: true});
+}
+Plotly.newPlot('plot',
+  /* Data */ [trace1],
+  /* Layout */ null,
+  /* Config */ {
+    scrollZoom: true, responsive: true, displayModeBar: true,
+    modeBarButtonsToAdd: [{
+      name: 'Clear data',
+      icon: Plotly.Icons.eraseshape,
+      click: () => {
+        clearData()
+        Plotly.redraw('plot')
+      },
+    }, {
+      name: 'Pause',
+      icon: Plotly.Icons.movie,
+      click: (gd, e) => {
+        fetch(isPaused ? '/resume' : '/pause', { method: 'POST' })
+        isPaused = !isPaused
+        let el = e.originalTarget
+        while (el.tagName !== 'A') el = el.parentElement
+        el.setAttribute('data-title', isPaused ? 'Resume' : 'Pause')
+      },
+    }],
+  })
 
-let maxLabel = -1
-let fetchInProgress = false
 setInterval(() => {
-  if (fetchInProgress) return
+  if (fetchInProgress || clearDataInProgress) return
   // Find mex from max - 20
   let mex = Math.max(0, maxLabel - 20)
   for (; mex <= maxLabel; mex++)
