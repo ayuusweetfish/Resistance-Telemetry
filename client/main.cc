@@ -193,6 +193,7 @@ int main() {
       readings_mutex.lock();
       readings.clear();
       timestamp_base = 0;
+      timestamp_base = -5000; // Force a reset after clear
       fputs("Cleared\n", stderr);
       readings_mutex.unlock();
       struct MHD_Response *resp = MHD_create_response_from_buffer(0, NULL, MHD_RESPMEM_PERSISTENT);

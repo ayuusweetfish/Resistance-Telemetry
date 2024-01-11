@@ -67,10 +67,10 @@ Plotly.newPlot('plot',
 
 setInterval(() => {
   if (fetchInProgress || clearDataInProgress) return
-  // Find mex from max - 20
-  let mex = Math.max(0, maxLabel - 20)
-  for (; mex <= maxLabel; mex++)
-    if (labels.indexOf(mex) === -1) break
+  // Find mex from the last 30 elements
+  let mex = maxLabel + 1
+  for (let i = labels.length - 2; i >= 0 && i >= labels.length - 30; i--)
+    if (labels[i + 1] !== labels[i] + 1) mex = labels[i] + 1
   const since = mex
   fetchInProgress = true
   fetch('/data?since=' + since).then((resp) => {
@@ -88,7 +88,7 @@ setInterval(() => {
           labels.splice(insertPos, 0, label)
           data.splice(insertPos, 0, +values[i + 1])
           maxLabel = Math.max(maxLabel, label)
-          console.log(label, labels)
+          // console.log(label, labels)
         }
         for (let i = 0; i < labels.length - 1; i++)
           if (labels[i] >= labels[i + 1]) alert('!')
