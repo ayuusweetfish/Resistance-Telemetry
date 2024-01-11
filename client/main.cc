@@ -49,12 +49,14 @@ int main() {
 
   if (!SimpleBLE::Adapter::bluetooth_enabled()) {
     printf("Bluetooth not enabled\n");
+    puts("Press Enter to exit"); getchar();
     return 1;
   }
 
   auto adapters = SimpleBLE::Adapter::get_adapters();
   if (adapters.empty()) {
-    printf("No adapter found\n");
+    printf("No Bluetooth adapter found\n");
+    puts("Press Enter to exit"); getchar();
     return 1;
   }
   auto adapter = adapters[0];
@@ -228,6 +230,12 @@ int main() {
     (MHD_AccessHandlerCallback)+request_handler, (void *)NULL,
     MHD_OPTION_END
   );
+  if (daemon == NULL) {
+    adapter.scan_stop();
+    printf("Cannot start HTTP server\n");
+    puts("Press Enter to exit"); getchar();
+    return 1;
+  }
   printf("http://localhost:24017/\n");
 
 #if defined(WIN32) || defined(_WIN32)
