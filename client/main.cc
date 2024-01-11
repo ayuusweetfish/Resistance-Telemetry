@@ -32,6 +32,7 @@ unsigned int index_html_len;
 
 std::deque<std::pair<int, double>> readings;
 std::mutex readings_mutex;
+int timestamp_base = 0;
 
 int main() {
 #if !USE_BUILTIN_INDEX_HTML
@@ -57,7 +58,46 @@ int main() {
   }
   auto adapter = adapters[0];
 
-  auto upd_print = [] (SimpleBLE::Peripheral p) {
+  // Add a value to the data. This requires `readings_mutex` to be held.
+  auto add_value = [] (uint32_t timestamp, uint32_t raw_adc) -> void {
+    // Calculate the real timestamp
+    int real_timestamp = (int)timestamp + timestamp_base;
+    int max_timestamp = (readings.empty() ? 0 : readings.back().first);
+    if (abs(real_timestamp - max_timestamp) > 50) {
+      // Out of range. Timestamp base needs to be adjusted.
+      // Check whether wrapping around (both directions, as data can be out-of-order).
+      if (abs((real_timestamp - 1024) - max_timestamp) <= 50) {
+        timestamp_base -= 1024;
+      } else if (abs((real_timestamp + 1024) - max_timestamp) <= 50) {
+        timestamp_base += 1024;
+      } else {  // Otherwise, simply treat the timestamp as the start of the new base.
+        timestamp_base = (max_timestamp + 1) - (int)timestamp;
+      }
+      real_timestamp = (int)timestamp + timestamp_base;
+    }
+
+    // Calculate resistance value
+    int32_t value_signed = (int32_t)(raw_adc << 10) >> 10;
+    double normalized = (double)value_signed / (1 << 22);
+  /*
+    int32_t range_min = -0x1fd200;  // 0x202e00
+    int32_t range_max =  0x1fd000;  // 0x1fd000
+    double normalized =
+      (double)(value_signed - range_min) / (range_max - range_min) - 0.5;
+    if (normalized < -0.5) normalized = -0.5;
+    if (normalized >  0.5) normalized =  0.5;
+  */
+    double resistance = 4990 * (1.0 / (0.5 + normalized) - 1);
+    fprintf(stderr, "t = %4u (%6d): ADC =%8d  R = %12.4lf\n",
+      timestamp, real_timestamp, value_signed, resistance);
+    auto insert_pos = std::lower_bound(
+      readings.begin(), readings.end(),
+      std::make_pair(real_timestamp, -1.0));
+    if (insert_pos == readings.end() || insert_pos->first != real_timestamp)
+      readings.insert(insert_pos, {real_timestamp, resistance});
+  };
+
+  auto upd_print = [add_value] (SimpleBLE::Peripheral p) {
     if (p.identifier() == "RT") {
       auto mfr_data = p.manufacturer_data();
       readings_mutex.lock();
@@ -80,16 +120,7 @@ int main() {
         for (int i = 5 - 1; i >= 0; i--) {
           uint32_t timestamp = (start_timestamp - i) & ((1 << 10) - 1);
           if (timestamp >= 1000) continue;
-          int real_timestamp = timestamp - 1;
-          uint32_t value0 = read_bits(payload, 10 + i * 22, 22);
-          double normalized = (double)((int32_t)(value0 << 10) >> 10) / (1 << 22);
-          double resistance = 4990 * (1.0 / (0.5 + normalized) - 1);
-          fprintf(stderr, "t = %4u: ADC = %06x  R = %12.4lf\n", timestamp, value0, resistance);
-          auto insert_pos = std::lower_bound(
-            readings.begin(), readings.end(),
-            std::make_pair(real_timestamp, -1.0));
-          if (insert_pos == readings.end() || insert_pos->first != real_timestamp)
-            readings.insert(insert_pos, {real_timestamp, resistance});
+          add_value(timestamp, read_bits(payload, 10 + i * 22, 22));
         }
       }
       readings_mutex.unlock();
@@ -177,16 +208,23 @@ int main() {
   );
   printf("http://localhost:24017/\n");
 
-/*
+  auto rand = [] () -> uint32_t {
+    static uint32_t seed = 240111;
+    return (seed = (seed * 1103515245 + 12345) & 0x7fffffff);
+  };
   int x = 0;
   while (1) {
     x++;
-    readings_mutex.lock();
-    readings.push_back({x, 1000 + x * 20 + (99999999 / x) * 477 % 997});
-    readings_mutex.unlock();
+    if ((rand() >> 4) % 2 != 0) {
+      if (rand() % 41 == 0) x = (rand() >> 7) & 1023;
+      if ((rand() >> 4) % 2 == 0) {
+        add_value((x - 4) & 1023, 0x400000 - 500);
+        add_value((x - 3) & 1023, 0x400000 - 500);
+      }
+      add_value(x & 1023, 400);
+    }
     usleep(200000);
   }
-*/
   while (1) sleep(1);
   MHD_stop_daemon(daemon);
 
