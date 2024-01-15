@@ -22,6 +22,12 @@ jobs:
       - name: Extract SimpleBLE
         working-directory: ./client
         run: 7z x -osimpleble_static_windows-x64 simpleble_static_windows-x64.zip
+      - name: Download xxd
+        working-directory: ./client
+        run: curl -L -o xxd.c https://raw.githubusercontent.com/vim/vim/v9.1.0029/src/xxd/xxd.c
+      - name: Build xxd
+        working-directory: ./client
+        run: cl xxd.c /Fexxd.exe
       - name: Generate index.html header
         working-directory: ./client
         shell: C:\Program Files\Git\bin\bash.exe
