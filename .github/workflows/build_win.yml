@@ -12,13 +12,13 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
       - name: Download libmicrohttpd
         working-directory: ./client
-        run: curl -o libmicrohttpd-latest-w32-bin.zip https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-latest-w32-bin.zip
+        run: curl -L -o libmicrohttpd-latest-w32-bin.zip https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-latest-w32-bin.zip
       - name: Extract libmicrohttpd
         working-directory: ./client
         run: 7z x -olibmicrohttpd-latest-w32-bin libmicrohttpd-latest-w32-bin.zip
       - name: Download SimpleBLE
         working-directory: ./client
-        run: curl -o simpleble-0.6.1.zip https://github.com/OpenBluetoothToolbox/SimpleBLE/releases/download/v0.6.1/simpleble_static_windows-x64.zip
+        run: curl -L -o simpleble-0.6.1.zip https://github.com/OpenBluetoothToolbox/SimpleBLE/releases/download/v0.6.1/simpleble_static_windows-x64.zip
       - name: Extract SimpleBLE
         working-directory: ./client
         run: 7z x -osimpleble-0.6.1 simpleble-0.6.1.zip
