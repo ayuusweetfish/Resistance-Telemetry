@@ -24,4 +24,9 @@ jobs:
         run: 7z x -osimpleble_static_windows-x64 simpleble_static_windows-x64.zip
       - name: Build Windows client
         working-directory: ./client
-        run: cl /EHsc /I libmicrohttpd-0.9.77-w32-bin/x86_64/VS2022/Release-static /I client/impleble_static_windows-x64/install/include main.cc /Feclient.exe
+        run: cl /EHsc /I libmicrohttpd-0.9.77-w32-bin/x86_64/VS2022/Release-static /I simpleble_static_windows-x64/install/include main.cc libmicrohttpd-0.9.77-w32-bin/x86_64/VS2022/Release-static/libmicrohttpd.lib simpleble_static_windows-x64/lib/simpleble.lib /Feclient.exe
+      - name: Upload built executable
+        uses: actions/upload-artifact@v3
+        with:
+          name: client-win.exe
+          path: client/client.exe
