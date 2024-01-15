@@ -18,10 +18,10 @@ jobs:
         run: 7z x -olibmicrohttpd-latest-w32-bin libmicrohttpd-latest-w32-bin.zip
       - name: Download SimpleBLE
         working-directory: ./client
-        run: curl -L -o simpleble-0.6.1.zip https://github.com/OpenBluetoothToolbox/SimpleBLE/releases/download/v0.6.1/simpleble_static_windows-x64.zip
+        run: curl -L -o simpleble_static_windows-x64.zip https://github.com/OpenBluetoothToolbox/SimpleBLE/releases/download/v0.6.1/simpleble_static_windows-x64.zip
       - name: Extract SimpleBLE
         working-directory: ./client
-        run: 7z x -osimpleble-0.6.1 simpleble-0.6.1.zip
+        run: 7z x -osimpleble_static_windows-x64 simpleble_static_windows-x64.zip
       - name: Build Windows client
         working-directory: ./client
-        run: cl /EHsc /I libmicrohttpd-0.9.77-w32-bin/x86_64/VS2022/Release-static /I client/simpleble-0.6.1/install/include main.cc /Feclient.exe
+        run: cl /EHsc /I libmicrohttpd-0.9.77-w32-bin/x86_64/VS2022/Release-static /I client/impleble_static_windows-x64/install/include main.cc /Feclient.exe
