@@ -9,7 +9,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#if defined(WIN32) || defined(_WIN32)
+#include <windows.h>
+#define sleep(x) Sleep(1000 * (x))
+#else
 #include <unistd.h>
+#endif
 
 #include <algorithm>  // std::upper_bound
 #include <deque>
@@ -19,7 +24,7 @@
 #include <utility>    // std::pair
 #include <vector>
 
-#define USE_BUILTIN_INDEX_HTML 1
+#define USE_BUILTIN_INDEX_HTML 0
 #if USE_BUILTIN_INDEX_HTML
 // xxd -i index.html > index.html.h
 #include "index.html.h"
