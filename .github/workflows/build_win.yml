@@ -11,13 +11,17 @@ jobs:
       - name: Set up Windows build environment
         uses: ilammy/msvc-dev-cmd@v1
       - name: Download libmicrohttpd
-        run: curl -o client/libmicrohttpd-latest-w32-bin.zip https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-latest-w32-bin.zip
+        working-directory: ./client
+        run: curl -o libmicrohttpd-latest-w32-bin.zip https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-latest-w32-bin.zip
       - name: Extract libmicrohttpd
-        run: Expand-Archive -Path client/libmicrohttpd-latest-w32-bin.zip -DestinationPath client/libmicrohttpd-latest-w32-bin
+        working-directory: ./client
+        run: 7z x -olibmicrohttpd-latest-w32-bin libmicrohttpd-latest-w32-bin.zip
       - name: Download SimpleBLE
-        run: curl -o client/simpleble-0.6.1.zip https://github.com/OpenBluetoothToolbox/SimpleBLE/releases/download/v0.6.1/simpleble_static_windows-x64.zip
+        working-directory: ./client
+        run: curl -o simpleble-0.6.1.zip https://github.com/OpenBluetoothToolbox/SimpleBLE/releases/download/v0.6.1/simpleble_static_windows-x64.zip
       - name: Extract SimpleBLE
-        run: Expand-Archive -Path client/simpleble-0.6.1.zip -DestinationPath client/simpleble-0.6.1
+        working-directory: ./client
+        run: 7z x -osimpleble-0.6.1 simpleble-0.6.1.zip
       - name: Build Windows client
         working-directory: ./client
         run: cl /EHsc /I libmicrohttpd-0.9.77-w32-bin/x86_64/VS2022/Release-static /I client/simpleble-0.6.1/install/include main.cc /Feclient.exe
