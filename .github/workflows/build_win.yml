@@ -1,9 +1,6 @@
 name: build-win
 
-on:
-  push:
-    paths:
-    - 'client/**'
+on: push
 
 jobs:
   build:
