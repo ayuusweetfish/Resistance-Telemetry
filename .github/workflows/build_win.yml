@@ -1,0 +1,18 @@
+name: build-win
+
+on:
+  push:
+    paths:
+    - 'client/**'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Set up Windows build environment
+        uses: actions/checkout@v4
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Build Windows client
+        working-directory: ./client
+        shell: cmd
+        run: cl /EHsc main.cc /Fclient.exe

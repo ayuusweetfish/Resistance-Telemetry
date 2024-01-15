@@ -19,7 +19,7 @@
 #include <utility>    // std::pair
 #include <vector>
 
-#define USE_BUILTIN_INDEX_HTML 0
+#define USE_BUILTIN_INDEX_HTML 1
 #if USE_BUILTIN_INDEX_HTML
 // xxd -i index.html > index.html.h
 #include "index.html.h"
@@ -246,6 +246,7 @@ int main() {
   system("open http://localhost:24017/");
 #endif
 
+/*
   auto rand = [] () -> uint32_t {
     static uint32_t seed = 240111;
     return (seed = (seed * 1103515245 + 12345) & 0x7fffffff);
@@ -263,6 +264,7 @@ int main() {
     }
     usleep(200000);
   }
+*/
   while (1) sleep(1);
   MHD_stop_daemon(daemon);
 

@@ -10,3 +10,8 @@ Built binaries are at build_simpleble/lib
 (cd libmicrohttpd-0.9.77; ./configure; make -j4)
 
 Built binaries are at libmicrohttpd-0.9.77/src/microhttpd/.libs
+
+# Cross-compiling to Windows
+
+CXXFLAGS=-I. cmake SimpleBLE/simpleble -B build_simpleble -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ -DCMAKE_SYSTEM_NAME=Windows
+(cd build_simpleble; make -j4)
