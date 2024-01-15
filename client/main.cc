@@ -24,7 +24,7 @@
 #include <utility>    // std::pair
 #include <vector>
 
-#define USE_BUILTIN_INDEX_HTML 0
+#define USE_BUILTIN_INDEX_HTML 1
 #if USE_BUILTIN_INDEX_HTML
 // xxd -i index.html > index.html.h
 #include "index.html.h"
