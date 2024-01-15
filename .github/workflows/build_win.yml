@@ -30,7 +30,6 @@ jobs:
         run: cl xxd.c /Fexxd.exe
       - name: Generate index.html header
         working-directory: ./client
-        shell: C:\Program Files\Git\bin\bash.exe
         run: xxd -i index.html > index.html.h
       - name: Build Windows client
         working-directory: ./client
