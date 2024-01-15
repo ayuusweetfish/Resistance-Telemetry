@@ -9,8 +9,9 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Set up Windows build environment
+      - name: Check out source
         uses: actions/checkout@v4
+      - name: Set up Windows build environment
         uses: ilammy/msvc-dev-cmd@v1
       - name: Build Windows client
         working-directory: ./client
