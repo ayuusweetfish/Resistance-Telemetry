@@ -9,7 +9,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#if defined(WIN32) || defined(_WIN32)
+#include <windows.h>
+#define sleep(x) Sleep(1000 * (x))
+#else
 #include <unistd.h>
+#endif
 
 #include <algorithm>  // std::upper_bound
 #include <deque>
@@ -172,7 +177,7 @@ int main() {
       // Read the values
       readings_mutex.lock();
       auto itr = std::lower_bound(readings.begin(), readings.end(),
-        std::make_pair(since, std::numeric_limits<double>::min()));
+        std::make_pair(since, (std::numeric_limits<double>::min)()));
       std::vector<std::pair<int, double>> returned_values(itr, readings.end());
       readings_mutex.unlock();
       // Convert to space-separated string

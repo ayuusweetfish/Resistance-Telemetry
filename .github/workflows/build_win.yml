@@ -1,18 +1,41 @@
 name: build-win
 
-on:
-  push:
-    paths:
-    - 'client/**'
+on: push
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Set up Windows build environment
+      - name: Check out source
         uses: actions/checkout@v4
+      - name: Set up Windows build environment
         uses: ilammy/msvc-dev-cmd@v1
+      - name: Download libmicrohttpd
+        working-directory: ./client
+        run: curl -L -o libmicrohttpd-latest-w32-bin.zip https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-latest-w32-bin.zip
+      - name: Extract libmicrohttpd
+        working-directory: ./client
+        run: 7z x libmicrohttpd-latest-w32-bin.zip
+      - name: Download SimpleBLE
+        working-directory: ./client
+        run: curl -L -o simpleble_static_windows-x64.zip https://github.com/OpenBluetoothToolbox/SimpleBLE/releases/download/v0.6.1/simpleble_static_windows-x64.zip
+      - name: Extract SimpleBLE
+        working-directory: ./client
+        run: 7z x -osimpleble_static_windows-x64 simpleble_static_windows-x64.zip
+      - name: Download xxd
+        working-directory: ./client
+        run: curl -L -o xxd.c https://raw.githubusercontent.com/vim/vim/v9.1.0029/src/xxd/xxd.c
+      - name: Build xxd
+        working-directory: ./client
+        run: cl xxd.c /Fexxd.exe
+      - name: Generate index.html header
+        working-directory: ./client
+        run: xxd -i index.html > index.html.h
       - name: Build Windows client
         working-directory: ./client
-        shell: cmd
-        run: cl /EHsc main.cc /Fclient.exe
+        run: cl /EHsc /I libmicrohttpd-0.9.77-w32-bin/x86_64/VS2022/Release-static /I simpleble_static_windows-x64/install/include /std:c++17 main.cc libmicrohttpd-0.9.77-w32-bin/x86_64/VS2022/Release-static/libmicrohttpd.lib simpleble_static_windows-x64/install/lib/simpleble.lib /MD /Feclient.exe
+      - name: Upload built executable
+        uses: actions/upload-artifact@v3
+        with:
+          name: client-win.exe
+          path: client/client.exe
