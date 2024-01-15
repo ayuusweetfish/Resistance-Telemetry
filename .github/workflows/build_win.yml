@@ -15,7 +15,7 @@ jobs:
         run: curl -L -o libmicrohttpd-latest-w32-bin.zip https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-latest-w32-bin.zip
       - name: Extract libmicrohttpd
         working-directory: ./client
-        run: 7z x -o. libmicrohttpd-latest-w32-bin.zip
+        run: 7z x libmicrohttpd-latest-w32-bin.zip
       - name: Download SimpleBLE
         working-directory: ./client
         run: curl -L -o simpleble_static_windows-x64.zip https://github.com/OpenBluetoothToolbox/SimpleBLE/releases/download/v0.6.1/simpleble_static_windows-x64.zip
