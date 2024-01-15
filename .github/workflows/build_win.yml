@@ -24,7 +24,7 @@ jobs:
         run: 7z x -osimpleble_static_windows-x64 simpleble_static_windows-x64.zip
       - name: Generate index.html header
         working-directory: ./client
-        shell: gitbash
+        shell: C:\Program Files\Git\bin\bash.exe
         run: xxd -i index.html > index.html.h
       - name: Build Windows client
         working-directory: ./client
